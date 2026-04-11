@@ -1,53 +1,184 @@
-BeginProject mon_projet;
+BeginProject test_complet;
 
 Setup :
-    %% declarations des variables
-    define x1 | y2 | res : integer;
-    define taux : float;
-    const max14 : integer = 100;
+    %% ---- Variables entieres multiples ----
+    define a | b | c : integer;
+
+    %% ---- Variable entiere avec init positive ----
+    define x : integer = 0;
+
+    %% ---- Variable entiere avec init negative ----
+    define y : integer = (-3);
+
+    %% ---- Variables flottantes ----
+    define f1 | f2 : float;
+
+    %% ---- Variable flottante avec init ----
+    define pi : float = 3.14;
+    //*Partie instruction   
+    kemgpm 
+    *//
+    %% ---- Variable flottante avec init negative ----
+    define temp : float = (-1.5);
+
+    %% ---- Constante entiere ----
+    const cmax : integer = 100;
+
+    %% ---- Constante flottante ----
+    const ratio : float = 2.5;
+
+    %% ---- Tableau ----
+    define t1 : [integer; 5];
+
+    %% ---- Variables pour boucles et resultats ----
+    define i : integer;
+    define j : integer;
+    define res : integer;
+
+    %% ---- ERREUR 1: double declaration ----
+    define a : integer;
 
 Run :
 {
+    //* Commentaire multi-ligne :
+         ceci est sur plusieurs lignes
+         et se termine avec etoile-double-slash *//
 
-    %% affectations simples
-    x1 <- 10;
-    y2 <- 3;
-    taux <- 3.14;
+    %% ---- Affectations simples ----
+    a <- 10;
+    b <- 4;
+    c <- 0;
+    f1 <- 1.5;
+    f2 <- 2.75;
 
-    %% operations arithmetiques
-    res <- x1 + y2 * 2;
-    res <- (x1 - y2) / 2;
+    %% ---- Arithmetique: tous les operateurs ----
+    res <- a + b;
+    res <- a - b;
+    res <- a * b;
+    res <- a / b;
 
-    %% comparaisons
-    if (x1 > y2) then:
+    %% ---- Priorite et parentheses ----
+    res <- a + b * b;
+    res <- (a + b) * (a - b);
+
+    %% ---- Unaire moins ----
+    res <- (-a);
+
+    %% ---- ERREUR 2: division par zero (litterale) ----
+    res <- a / x;
+
+    %% ---- Acces tableau: ecriture ----
+    t1[0] <- 42;
+    t1[1] <- a + b;
+    t1[2] <- (-7);
+
+    %% ---- Acces tableau: lecture ----
+    res <- t1[0];
+    res <- t1[0] + t1[1];
+
+    %% ---- if sans else ----
+    if (a > b) then:
     {
-        res <- x1;
+        res <- a;
+    } endIf;
+
+    %% ---- if avec else ----
+    if (a == b) then:
+    {
+        res <- 0;
     } else {
-        res <- y2;
+        res <- 1;
     } endIf;
 
-    %% operateurs logiques
-    if ((x1 >= 0) AND (y2 <= 100)) then:
+    %% ---- Toutes les comparaisons ----
+    if (a != b) then: { res <- 1; } endIf;
+    if (a < b)  then: { res <- 2; } endIf;
+    if (a <= b) then: { res <- 3; } endIf;
+    if (a >= b) then: { res <- 4; } endIf;
+
+    %% ---- Conditions: AND ----
+    if ((a >= 0) AND (b <= cmax)) then:
     {
-        res <- x1;
+        res <- a + b;
     } endIf;
 
-    if (NON (x1 == y2)) then:
+    %% ---- Conditions: OR ----
+    if ((a == 0) OR (b == 0)) then:
     {
         res <- 0;
     } endIf;
 
-    %% boucle while
-    loop while (res != 0) {
-        res <- res - 1;
+    %% ---- Conditions: NON ----
+    if (NON (a == b)) then:
+    {
+        res <- a;
+    } endIf;
+
+    %% ---- Conditions: AND + OR combines ----
+    if ((a > 0) AND (b > 0)) then:
+    {
+        if ((c == 0) OR (NON (a == b))) then:
+        {
+            res <- a * b;
+        } endIf;
+    } else {
+        res <- 0;
+    } endIf;
+
+    %% ---- If imbrique: else dans else ----
+    if (a > 10) then:
+    {
+        res <- a;
+    } else {
+        if (a > 5) then:
+        {
+            res <- b;
+        } else {
+            res <- c;
+        } endIf;
+    } endIf;
+
+    %% ---- Boucle while ----
+    i <- 0;
+    loop while (i != 5) {
+        i <- i + 1;
     } endloop;
 
-    %% boucle for
+    %% ---- Boucle while avec condition complexe ----
+    loop while ((i != 0) AND (b > 0)) {
+        i <- i - 1;
+    } endloop;
+
+    %% ---- Boucle for: litteraux ----
     for i in 1 to 10 {
         res <- res + i;
     } endfor;
 
-    out("valeur de res : ", res);
+    %% ---- Boucle for: expressions ----
+    for j in a to cmax {
+        res <- res + j;
+    } endfor;
+
+    %% ---- Input ----
+    input(a);
+
+    %% ---- Output: string, IDF, entier, flottant ----
+    out("a = ", a, " b = ", b, 42, 3.14);
+
+    %% ---- ERREUR 3: modification de constante ----
+    cmax <- 200;
+
+    %% ---- ERREUR 4: variable non declaree (affectation) ----
+    z <- 5;
+
+    %% ---- ERREUR 5: variable non declaree (expression) ----
+    res <- z + a;
+
+    %% ---- ERREUR 6: variable non declaree (input) ----
+    input(z2);
+
+    %% ---- ERREUR 7: variable non declaree (output) ----
+    out(z3);
 }
 
 EndProject;

@@ -1,46 +1,47 @@
 #include "quad.h"
+#define RED   "\033[1;31m"
+#define RESET "\033[0m"
 
-Quadruplet quads[MAX_QUADS];
+qdr quad[MAX_QUADS];
 int qc = 0;
 int temp_count = 0;
 
-char* nouveau_temp(void) {
+char *nouveau_temp(void) {
     static char temp[20];
     sprintf(temp, "T%d", temp_count++);
     return temp;
 }
 
-/* Generer un quadruplet */
-int generer_quad(const char *op, const char *arg1, const char *arg2, const char *result) {
+/* 1- Fonction d'ajout d'un quadruplet a une table de quadruplets */
+void quadr(char oper[], char op1[], char op2[], char res[]) {
     if (qc >= MAX_QUADS) {
-        fprintf(stderr, "Erreur: depassement du nombre max de quadruplets\n");
+        fprintf(stderr, RED "Erreur: depassement du nombre max de quadruplets" RESET "\n");
         exit(1);
     }
-    strncpy(quads[qc].op,     op     ? op     : "", 9); //if its null use empty string
-    strncpy(quads[qc].arg1,   arg1   ? arg1   : "", MAX_ARG - 1);
-    strncpy(quads[qc].arg2,   arg2   ? arg2   : "", MAX_ARG - 1); // -1 when its bigger than max arg to add \0
-    strncpy(quads[qc].result, result ? result : "", MAX_ARG - 1);
-    return qc++;
+    strcpy(quad[qc].oper, oper ? oper : "");
+    strcpy(quad[qc].op1,  op1  ? op1  : "");
+    strcpy(quad[qc].op2,  op2  ? op2  : "");
+    strcpy(quad[qc].res,  res  ? res  : "");
+    qc++;
 }
 
-/* Mettre a jour un quadruplet */
-void maj_quad(int index, const char *result) {
-    if (index >= 0 && index < qc) {
-        strncpy(quads[index].result, result ? result : "", MAX_ARG - 1);
-    }
+/* 2- Fonction qui permet de mettre a jour les quadruplets
+   selon la position : (0=oper, 1=op1, 2=op2, 3=res)       */
+void updateQuad(int num_quad, int colon_quad, char val[]) {
+    if (num_quad < 0 || num_quad >= qc) return;
+    if      (colon_quad == 0) strcpy(quad[num_quad].oper, val);
+    else if (colon_quad == 1) strcpy(quad[num_quad].op1,  val);
+    else if (colon_quad == 2) strcpy(quad[num_quad].op2,  val);
+    else if (colon_quad == 3) strcpy(quad[num_quad].res,  val);
 }
 
-/* Afficher les quadruplets */
-void afficher_quads(void) {
-    printf("\n╔═══════════════════════════════════════════════════╗\n");
-    printf("║          CODE INTERMEDIAIRE (Quadruplets)         ║\n");
-    printf("╠═════╦══════════╦════════════╦════════════╦════════╣\n");
-    printf("║  #  ║ Operateur║ Arg1       ║ Arg2       ║ Result ║\n");
-    printf("╠═════╬══════════╬════════════╬════════════╬════════╣\n");
-    for (int i = 0; i < qc; i++) {
-        printf("║ %-3d ║ %-8s ║ %-10s ║ %-10s ║ %-6s ║\n",
-               i, quads[i].op, quads[i].arg1, quads[i].arg2, quads[i].result);
+/* Fonction d'affichage des quadruplets generes */
+void afficher_qdr(void) {
+    printf("*********************Les Quadruplets***********************\n");
+    int i;
+    for (i = 0; i < qc; i++) {
+        printf("\n %d - (%s, %s, %s, %s)",
+               i, quad[i].oper, quad[i].op1, quad[i].op2, quad[i].res);
+               printf("\n");
     }
-    printf("╚═════╩══════════╩════════════╩════════════╩════════╝\n");
-    printf("Total: %d quadruplets\n\n", qc);
 }

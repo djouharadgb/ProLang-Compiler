@@ -508,12 +508,13 @@ char *yytext;
     #include "ts.h"
     #include "quad.h"
     #include "Syn.tab.h"
-
     int nb_ligne = 1;
     int nb_col   = 1;
+    #define RED   "\033[1;31m"
+    #define RESET "\033[0m"
 #define COMMENT 1
 
-#line 517 "lex.yy.c"
+#line 518 "lex.yy.c"
 
 /* Macros after this point can all be overridden by user definitions in
  * section 1.
@@ -664,10 +665,10 @@ YY_DECL
 	register char *yy_cp, *yy_bp;
 	register int yy_act;
 
-#line 23 "prolang.l"
+#line 24 "prolang.l"
 
 
-#line 671 "lex.yy.c"
+#line 672 "lex.yy.c"
 
 	if ( yy_init )
 		{
@@ -752,156 +753,156 @@ do_action:	/* This label is used only to access EOF actions. */
 
 case 1:
 YY_RULE_SETUP
-#line 25 "prolang.l"
+#line 26 "prolang.l"
 { BEGIN(COMMENT); }
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
-#line 26 "prolang.l"
+#line 27 "prolang.l"
 { BEGIN(INITIAL); }
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 27 "prolang.l"
+#line 28 "prolang.l"
 { nb_ligne++; nb_col = 1; }
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
-#line 28 "prolang.l"
+#line 29 "prolang.l"
 { /* ignorer le contenu du commentaire */ }
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 30 "prolang.l"
+#line 31 "prolang.l"
 { nb_col += yyleng; /* commentaire mono-ligne */ }
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 32 "prolang.l"
-{ nb_col += yyleng; return BeginProject; }
+#line 33 "prolang.l"
+{ nb_col += yyleng; ts_inserer_mc("BeginProject", "BeginProject"); return BeginProject; }
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 33 "prolang.l"
-{ nb_col += yyleng; return EndProject;   }
+#line 34 "prolang.l"
+{ nb_col += yyleng; ts_inserer_mc("EndProject",   "EndProject");   return EndProject;   }
 	YY_BREAK
 case 8:
 YY_RULE_SETUP
-#line 34 "prolang.l"
-{ nb_col += yyleng; return Setup;        }
+#line 35 "prolang.l"
+{ nb_col += yyleng; ts_inserer_mc("Setup",        "Setup");        return Setup;        }
 	YY_BREAK
 case 9:
 YY_RULE_SETUP
-#line 35 "prolang.l"
-{ nb_col += yyleng; return Run;          }
+#line 36 "prolang.l"
+{ nb_col += yyleng; ts_inserer_mc("Run",          "Run");          return Run;          }
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 36 "prolang.l"
-{ nb_col += yyleng; return DEFINE_MC;    }
+#line 37 "prolang.l"
+{ nb_col += yyleng; ts_inserer_mc("define",       "DEFINE_MC");    return DEFINE_MC;    }
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 37 "prolang.l"
-{ nb_col += yyleng; return CONST_MC;     }
+#line 38 "prolang.l"
+{ nb_col += yyleng; ts_inserer_mc("const",        "CONST_MC");     return CONST_MC;     }
 	YY_BREAK
 case 12:
 YY_RULE_SETUP
-#line 38 "prolang.l"
-{ nb_col += yyleng; return INTEGER_MC;   }
+#line 39 "prolang.l"
+{ nb_col += yyleng; ts_inserer_mc("integer",      "INTEGER_MC");   return INTEGER_MC;   }
 	YY_BREAK
 case 13:
 YY_RULE_SETUP
-#line 39 "prolang.l"
-{ nb_col += yyleng; return FLOAT_MC;     }
+#line 40 "prolang.l"
+{ nb_col += yyleng; ts_inserer_mc("float",        "FLOAT_MC");     return FLOAT_MC;     }
 	YY_BREAK
 case 14:
 YY_RULE_SETUP
-#line 40 "prolang.l"
-{ nb_col += yyleng; return IF_MC;        }
+#line 41 "prolang.l"
+{ nb_col += yyleng; ts_inserer_mc("if",           "IF_MC");        return IF_MC;        }
 	YY_BREAK
 case 15:
 YY_RULE_SETUP
-#line 41 "prolang.l"
-{ nb_col += yyleng; return THEN_MC;      }
+#line 42 "prolang.l"
+{ nb_col += yyleng; ts_inserer_mc("then",         "THEN_MC");      return THEN_MC;      }
 	YY_BREAK
 case 16:
 YY_RULE_SETUP
-#line 42 "prolang.l"
-{ nb_col += yyleng; return ELSE_MC;      }
+#line 43 "prolang.l"
+{ nb_col += yyleng; ts_inserer_mc("else",         "ELSE_MC");      return ELSE_MC;      }
 	YY_BREAK
 case 17:
 YY_RULE_SETUP
-#line 43 "prolang.l"
-{ nb_col += yyleng; return ENDIF_MC;     }
+#line 44 "prolang.l"
+{ nb_col += yyleng; ts_inserer_mc("endIf",        "ENDIF_MC");     return ENDIF_MC;     }
 	YY_BREAK
 case 18:
 YY_RULE_SETUP
-#line 44 "prolang.l"
-{ nb_col += yyleng; return LOOP_MC;      }
+#line 45 "prolang.l"
+{ nb_col += yyleng; ts_inserer_mc("loop",         "LOOP_MC");      return LOOP_MC;      }
 	YY_BREAK
 case 19:
 YY_RULE_SETUP
-#line 45 "prolang.l"
-{ nb_col += yyleng; return WHILE_MC;     }
+#line 46 "prolang.l"
+{ nb_col += yyleng; ts_inserer_mc("while",        "WHILE_MC");     return WHILE_MC;     }
 	YY_BREAK
 case 20:
 YY_RULE_SETUP
-#line 46 "prolang.l"
-{ nb_col += yyleng; return ENDLOOP_MC;   }
+#line 47 "prolang.l"
+{ nb_col += yyleng; ts_inserer_mc("endloop",      "ENDLOOP_MC");   return ENDLOOP_MC;   }
 	YY_BREAK
 case 21:
 YY_RULE_SETUP
-#line 47 "prolang.l"
-{ nb_col += yyleng; return FOR_MC;       }
+#line 48 "prolang.l"
+{ nb_col += yyleng; ts_inserer_mc("for",          "FOR_MC");       return FOR_MC;       }
 	YY_BREAK
 case 22:
 YY_RULE_SETUP
-#line 48 "prolang.l"
-{ nb_col += yyleng; return INPUT_MC;     }
+#line 49 "prolang.l"
+{ nb_col += yyleng; ts_inserer_mc("input",        "INPUT_MC");     return INPUT_MC;     }
 	YY_BREAK
 case 23:
 YY_RULE_SETUP
-#line 49 "prolang.l"
-{ nb_col += yyleng; return TO_MC;        }
+#line 50 "prolang.l"
+{ nb_col += yyleng; ts_inserer_mc("to",           "TO_MC");        return TO_MC;        }
 	YY_BREAK
 case 24:
 YY_RULE_SETUP
-#line 50 "prolang.l"
-{ nb_col += yyleng; return ENDFOR_MC;    }
+#line 51 "prolang.l"
+{ nb_col += yyleng; ts_inserer_mc("endfor",       "ENDFOR_MC");    return ENDFOR_MC;    }
 	YY_BREAK
 case 25:
 YY_RULE_SETUP
-#line 51 "prolang.l"
-{ nb_col += yyleng; return IN_MC;        }
+#line 52 "prolang.l"
+{ nb_col += yyleng; ts_inserer_mc("in",           "IN_MC");        return IN_MC;        }
 	YY_BREAK
 case 26:
 YY_RULE_SETUP
-#line 52 "prolang.l"
-{ nb_col += yyleng; return OUT_MC;       }
+#line 53 "prolang.l"
+{ nb_col += yyleng; ts_inserer_mc("out",          "OUT_MC");       return OUT_MC;       }
 	YY_BREAK
 case 27:
 YY_RULE_SETUP
-#line 53 "prolang.l"
-{ nb_col += yyleng; return AND;          }
+#line 54 "prolang.l"
+{ nb_col += yyleng; ts_inserer_mc("AND",          "AND");          return AND;          }
 	YY_BREAK
 case 28:
 YY_RULE_SETUP
-#line 54 "prolang.l"
-{ nb_col += yyleng; return OR;           }
+#line 55 "prolang.l"
+{ nb_col += yyleng; ts_inserer_mc("OR",           "OR");           return OR;           }
 	YY_BREAK
 case 29:
 YY_RULE_SETUP
-#line 55 "prolang.l"
-{ nb_col += yyleng; return NON;          }
+#line 56 "prolang.l"
+{ nb_col += yyleng; ts_inserer_mc("NON",          "NON");          return NON;          }
 	YY_BREAK
 case 30:
 YY_RULE_SETUP
-#line 57 "prolang.l"
+#line 58 "prolang.l"
 {
                         nb_col += yyleng;
                         if (yyleng > 14) {
-                            printf("ERREUR lexicale: identificateur '%s' depasse 14 caracteres, ligne %d, col %d\n",
+                            printf(RED "ERREUR lexicale: identificateur '%s' depasse 14 caracteres, ligne %d, col %d" RESET "\n",
                                    yytext, nb_ligne, nb_col - yyleng);
                         } else {
                             yylval.sval = strdup(yytext);
@@ -911,7 +912,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 31:
 YY_RULE_SETUP
-#line 67 "prolang.l"
+#line 68 "prolang.l"
 {
                         nb_col += yyleng;
                         yylval.fval = atof(yytext);
@@ -920,12 +921,12 @@ YY_RULE_SETUP
 	YY_BREAK
 case 32:
 YY_RULE_SETUP
-#line 72 "prolang.l"
+#line 73 "prolang.l"
 {
                         nb_col += yyleng;
                         yylval.ival = atoi(yytext);
                         if (yylval.ival < -32768 || yylval.ival > 32767) {
-                            printf("ERREUR lexicale: entier '%s' hors limites [-32768, 32767], ligne %d, col %d\n",
+                            printf(RED "ERREUR lexicale: entier '%s' hors limites [-32768, 32767], ligne %d, col %d" RESET "\n",
                                    yytext, nb_ligne, nb_col - yyleng);
                         }
                         return NUM_INT;
@@ -933,7 +934,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 33:
 YY_RULE_SETUP
-#line 81 "prolang.l"
+#line 82 "prolang.l"
 {
                         nb_col += yyleng;
                         yylval.sval = strdup(yytext);
@@ -942,139 +943,139 @@ YY_RULE_SETUP
 	YY_BREAK
 case 34:
 YY_RULE_SETUP
-#line 87 "prolang.l"
-{ nb_col += yyleng; return OP_EQ;     }
+#line 88 "prolang.l"
+{ nb_col += yyleng; ts_inserer_sep("==", "OP_EQ");    return OP_EQ;     }
 	YY_BREAK
 case 35:
 YY_RULE_SETUP
-#line 88 "prolang.l"
-{ nb_col += yyleng; return OP_NE;     }
+#line 89 "prolang.l"
+{ nb_col += yyleng; ts_inserer_sep("!=", "OP_NE");    return OP_NE;     }
 	YY_BREAK
 case 36:
 YY_RULE_SETUP
-#line 89 "prolang.l"
-{ nb_col += yyleng; return OP_GE;     }
+#line 90 "prolang.l"
+{ nb_col += yyleng; ts_inserer_sep(">=", "OP_GE");    return OP_GE;     }
 	YY_BREAK
 case 37:
 YY_RULE_SETUP
-#line 90 "prolang.l"
-{ nb_col += yyleng; return OP_LE;     }
+#line 91 "prolang.l"
+{ nb_col += yyleng; ts_inserer_sep("<=", "OP_LE");    return OP_LE;     }
 	YY_BREAK
 case 38:
 YY_RULE_SETUP
-#line 91 "prolang.l"
-{ nb_col += yyleng; return OP_ASSIGN;  }
+#line 92 "prolang.l"
+{ nb_col += yyleng; ts_inserer_sep("<-", "OP_ASSIGN"); return OP_ASSIGN;  }
 	YY_BREAK
 case 39:
 YY_RULE_SETUP
-#line 92 "prolang.l"
-{ nb_col += yyleng; return OP_GT;     }
+#line 93 "prolang.l"
+{ nb_col += yyleng; ts_inserer_sep(">",  "OP_GT");    return OP_GT;     }
 	YY_BREAK
 case 40:
 YY_RULE_SETUP
-#line 93 "prolang.l"
-{ nb_col += yyleng; return OP_LT;     }
+#line 94 "prolang.l"
+{ nb_col += yyleng; ts_inserer_sep("<",  "OP_LT");    return OP_LT;     }
 	YY_BREAK
 case 41:
 YY_RULE_SETUP
-#line 95 "prolang.l"
-{ nb_col += yyleng; return OP_INIT;   }
+#line 96 "prolang.l"
+{ nb_col += yyleng; ts_inserer_sep("=",  "OP_INIT");  return OP_INIT;   }
 	YY_BREAK
 case 42:
 YY_RULE_SETUP
-#line 96 "prolang.l"
-{ nb_col += yyleng; return OP_ADD;    }
+#line 97 "prolang.l"
+{ nb_col += yyleng; ts_inserer_sep("+",  "OP_ADD");   return OP_ADD;    }
 	YY_BREAK
 case 43:
 YY_RULE_SETUP
-#line 97 "prolang.l"
-{ nb_col += yyleng; return OP_SUB;    }
+#line 98 "prolang.l"
+{ nb_col += yyleng; ts_inserer_sep("-",  "OP_SUB");   return OP_SUB;    }
 	YY_BREAK
 case 44:
 YY_RULE_SETUP
-#line 98 "prolang.l"
-{ nb_col += yyleng; return OP_MUL;    }
+#line 99 "prolang.l"
+{ nb_col += yyleng; ts_inserer_sep("*",  "OP_MUL");   return OP_MUL;    }
 	YY_BREAK
 case 45:
 YY_RULE_SETUP
-#line 99 "prolang.l"
-{ nb_col += yyleng; return OP_DIV;    }
+#line 100 "prolang.l"
+{ nb_col += yyleng; ts_inserer_sep("/",  "OP_DIV");   return OP_DIV;    }
 	YY_BREAK
 case 46:
 YY_RULE_SETUP
-#line 101 "prolang.l"
-{ nb_col += yyleng; return SEP_SEMICOLON; }
+#line 102 "prolang.l"
+{ nb_col += yyleng; ts_inserer_sep(";",  "SEP_SEMICOLON"); return SEP_SEMICOLON; }
 	YY_BREAK
 case 47:
 YY_RULE_SETUP
-#line 102 "prolang.l"
-{ nb_col += yyleng; return SEP_COLON;     }
+#line 103 "prolang.l"
+{ nb_col += yyleng; ts_inserer_sep(":",  "SEP_COLON");     return SEP_COLON;     }
 	YY_BREAK
 case 48:
 YY_RULE_SETUP
-#line 103 "prolang.l"
-{ nb_col += yyleng; return SEP_COMMA;     }
+#line 104 "prolang.l"
+{ nb_col += yyleng; ts_inserer_sep(",",  "SEP_COMMA");     return SEP_COMMA;     }
 	YY_BREAK
 case 49:
 YY_RULE_SETUP
-#line 104 "prolang.l"
-{ nb_col += yyleng; return SEP_PIPE;      }
+#line 105 "prolang.l"
+{ nb_col += yyleng; ts_inserer_sep("|",  "SEP_PIPE");      return SEP_PIPE;      }
 	YY_BREAK
 case 50:
 YY_RULE_SETUP
-#line 105 "prolang.l"
-{ nb_col += yyleng; return SEP_LBRACKET;  }
+#line 106 "prolang.l"
+{ nb_col += yyleng; ts_inserer_sep("[",  "SEP_LBRACKET");  return SEP_LBRACKET;  }
 	YY_BREAK
 case 51:
 YY_RULE_SETUP
-#line 106 "prolang.l"
-{ nb_col += yyleng; return SEP_RBRACKET;  }
+#line 107 "prolang.l"
+{ nb_col += yyleng; ts_inserer_sep("]",  "SEP_RBRACKET");  return SEP_RBRACKET;  }
 	YY_BREAK
 case 52:
 YY_RULE_SETUP
-#line 107 "prolang.l"
-{ nb_col += yyleng; return SEP_LBRACE;    }
+#line 108 "prolang.l"
+{ nb_col += yyleng; ts_inserer_sep("{",  "SEP_LBRACE");    return SEP_LBRACE;    }
 	YY_BREAK
 case 53:
 YY_RULE_SETUP
-#line 108 "prolang.l"
-{ nb_col += yyleng; return SEP_RBRACE;    }
+#line 109 "prolang.l"
+{ nb_col += yyleng; ts_inserer_sep("}",  "SEP_RBRACE");    return SEP_RBRACE;    }
 	YY_BREAK
 case 54:
 YY_RULE_SETUP
-#line 109 "prolang.l"
-{ nb_col += yyleng; return SEP_LPAREN;    }
+#line 110 "prolang.l"
+{ nb_col += yyleng; ts_inserer_sep("(",  "SEP_LPAREN");    return SEP_LPAREN;    }
 	YY_BREAK
 case 55:
 YY_RULE_SETUP
-#line 110 "prolang.l"
-{ nb_col += yyleng; return SEP_RPAREN;    }
+#line 111 "prolang.l"
+{ nb_col += yyleng; ts_inserer_sep(")",  "SEP_RPAREN");    return SEP_RPAREN;    }
 	YY_BREAK
 case 56:
 YY_RULE_SETUP
-#line 112 "prolang.l"
+#line 113 "prolang.l"
 { nb_col += yyleng; }
 	YY_BREAK
 case 57:
 YY_RULE_SETUP
-#line 113 "prolang.l"
+#line 114 "prolang.l"
 { nb_ligne++; nb_col = 1; }
 	YY_BREAK
 case 58:
 YY_RULE_SETUP
-#line 115 "prolang.l"
+#line 116 "prolang.l"
 {
-                        printf("ERREUR lexicale: caractere inconnu '%s', ligne %d, col %d\n",
+                        printf(RED "ERREUR lexicale: caractere inconnu '%s', ligne %d, col %d" RESET "\n",
                                yytext, nb_ligne, nb_col);
                         nb_col += yyleng;
                     }
 	YY_BREAK
 case 59:
 YY_RULE_SETUP
-#line 121 "prolang.l"
+#line 122 "prolang.l"
 ECHO;
 	YY_BREAK
-#line 1078 "lex.yy.c"
+#line 1079 "lex.yy.c"
 case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(COMMENT):
 	yyterminate();
@@ -1961,5 +1962,5 @@ int main()
 	return 0;
 	}
 #endif
-#line 121 "prolang.l"
+#line 122 "prolang.l"
 

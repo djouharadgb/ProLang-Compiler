@@ -5,71 +5,56 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define TABLE_SIZE 256   /* Taille de la table de hachage */
-#define MAX_IDF    14    /* Longueur max d'un identificateur */
+#define MAX_TS   200   /* taille table IDF / CONST / TABLEAU */
+#define MAX_SM    50   /* taille tables mots-cles et separateurs */
+#define MAX_IDF   19   /* longueur max d'un identifiant */
 
-/* Types possibles */
-typedef enum {
-    TYPE_INTEGER,
-    TYPE_FLOAT
-} TypeVar;
+/* Types et natures — gardes pour compatibilite avec Syn.y */
+typedef enum { TYPE_INTEGER, TYPE_FLOAT }             TypeVar;
+typedef enum { NATURE_VAR, NATURE_CONST, NATURE_TABLEAU } NatureVar;
 
-/* Nature de l'entree */
-typedef enum {
-    NATURE_VAR,
-    NATURE_CONST,
-    NATURE_TABLEAU
-} NatureVar;
+/* -------- Table des IDFs / Constantes / Tableaux -------- */
+typedef struct {
+    int  state;        /* 0: libre, 1: occupe            */
+    char name[20];     /* nom de l'identifiant           */
+    char code[20];     /* "IDF", "CONST" ou "TABLEAU"   */
+    char type[20];     /* "integer" ou "float"           */
+    char val[20];      /* valeur initiale / taille / "" */
+} TypeTS;
 
-/* Structure d'une entree dans la table des symboles */
-typedef struct Symbol {
-    char   nom[MAX_IDF + 1];
-    TypeVar type;
-    NatureVar nature;
-    int    taille;         /* taille du tableau (1 si variable simple) */
-    int    est_init;       /* 1 si initialisee, 0 sinon */
-    union {
-        int    val_int;
-        float  val_float;
-    } valeur;
-    struct Symbol *suivant; /* chainage pour collision */
-} Symbol;
+/* -------- Table des mots-cles et separateurs -------- */
+typedef struct {
+    int  state;
+    char name[20];     /* texte du lexeme (ex: "if", ";") */
+    char type[20];     /* token Bison (ex: "IF_MC")        */
+} TypeSM;
 
+extern TypeTS TS[MAX_TS];
+extern TypeSM tabM[MAX_SM];   /* mots-cles   */
+extern TypeSM tabS[MAX_SM];   /* separateurs */
+extern int cpt, cptm, cpts;
 
-/* Fonction de hachage FNV-1a */
-unsigned int fnv1a_hash(const char *cle);
+/* Compteur global d'erreurs semantiques */
+extern int semantic_errors;
 
-/* Initialiser la table des symboles */
+/* -------- API -------- */
 void ts_initialiser(void);
 
-/* Rechercher un symbole — retourne NULL si non trouve */
-Symbol* ts_rechercher(const char *nom);
+int  ts_inserer_variable (const char *nom, TypeVar type);
+int  ts_inserer_constante(const char *nom, TypeVar type);
+int  ts_inserer_tableau  (const char *nom, TypeVar type, int taille);
 
-/* Inserer une variable simple */
-int ts_inserer_variable(const char *nom, TypeVar type);
+void ts_inserer_mc (const char *nom, const char *token);
+void ts_inserer_sep(const char *nom, const char *token);
 
-/* Inserer une constante */
-int ts_inserer_constante(const char *nom, TypeVar type);
+int  ts_est_declare       (const char *nom);
+int  ts_est_constante     (const char *nom);
+int  ts_double_declaration(const char *nom);
+void ts_marquer_init      (const char *nom);
+void        ts_set_val    (const char *nom, const char *val);
+const char *ts_get_val    (const char *nom);
 
-/* Inserer un tableau */
-int ts_inserer_tableau(const char *nom, TypeVar type, int taille);
-
-/* Verifier si un symbole est declare */
-int ts_est_declare(const char *nom);
-
-/* Marquer un symbole comme initialise */
-void ts_marquer_init(const char *nom);
-
-/* Verifier la double declaration — retourne 1 si deja declare */
-int ts_double_declaration(const char *nom);
-
-/* Verifier si c'est une constante */
-int ts_est_constante(const char *nom);
-
-/* Afficher la table des symboles */
 void ts_afficher(void);
+void ts_liberer (void);
 
-/* Liberer la memoire de la table */
-void ts_liberer(void);
-
-#endif 
+#endif

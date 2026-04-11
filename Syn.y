@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#define RED   "\033[1;31m"
+#define RESET "\033[0m"
 #include "ts.h"
 #include "quad.h"
 
@@ -10,7 +12,16 @@ int  yyerror(char *msg);
 
 extern int nb_ligne;
 extern int nb_col;
+extern int semantic_errors;  /* defini dans ts.c */
 TypeVar type_courant; /* Type courant des variables when we have multiple declarations   */
+
+/* Pending IDF list — collecte les noms avant que le type soit connu */
+#define MAX_PENDING_IDF 100
+static char *pending_idfs[MAX_PENDING_IDF];
+static int pending_count = 0;
+
+/* Pour sauvegarder le debut de l'evaluation de la condition de boucle */
+static int debut_condition = 0;
 %}
 
 %union {
@@ -80,9 +91,12 @@ programme
       SEP_LBRACE liste_instructions SEP_RBRACE
       EndProject SEP_SEMICOLON
         {
-            printf("\nAnalyse syntaxique et semantique correcte.\n");
+            if (semantic_errors == 0)
+                printf("\nAnalyse syntaxique et semantique correcte.\n");
+            else
+                printf(RED "\n%d erreur(s) semantique(s) detectee(s) - analyse terminee avec erreurs." RESET "\n", semantic_errors);
             ts_afficher();
-            afficher_quads();
+            afficher_qdr();
             YYACCEPT;
         }
     ;
@@ -99,45 +113,83 @@ liste_declarations
 
 declaration
     : decl_variable
-    | decl_tableau
     | decl_constante
     ;
 
+/* decl_variable absorbs decl_tableau — factored to remove the LALR conflict:
+   DEFINE_MC IDF : could be tableau OR variable; need 2-token lookahead after ":".
+   Solution: share the prefix DEFINE_MC liste_idf SEP_COLON and branch inside suite_definition. */
 decl_variable
-    : DEFINE_MC liste_idf SEP_COLON type SEP_SEMICOLON
-        { printf("Declaration de variable(s) correcte.\n"); }
-    | DEFINE_MC liste_idf SEP_COLON type OP_INIT valeur SEP_SEMICOLON
-        { printf("Declaration de variable(s) avec initialisation correcte.\n"); }
+    : DEFINE_MC liste_idf SEP_COLON suite_definition
     ;
 
-decl_tableau
-    : DEFINE_MC IDF SEP_COLON SEP_LBRACKET type SEP_SEMICOLON NUM_INT SEP_RBRACKET SEP_SEMICOLON
+suite_definition
+    : type SEP_SEMICOLON
         {
-            if ($7 <= 0) { /* taille inf ou egale a 0*/
-                printf("ERREUR semantique: taille de tableau invalide pour '%s', ligne %d, col %d\n",
-                       $2, nb_ligne, nb_col);
-            } else {
-                ts_inserer_tableau($2, type_courant, $7);
+            int ok = 1;
+            for (int i = 0; i < pending_count; i++) {
+                if (!ts_inserer_variable(pending_idfs[i], type_courant)) ok = 0;
+                free(pending_idfs[i]);
             }
-            printf("Declaration de tableau correcte.\n");
+            pending_count = 0;
+            if (ok) printf("Declaration de variable(s) correcte.\n");
+        }
+    | type OP_INIT valeur SEP_SEMICOLON
+        {
+            /* $3 = valeur string */
+            int ok = 1;
+            for (int i = 0; i < pending_count; i++) {
+                if (!ts_inserer_variable(pending_idfs[i], type_courant)) { ok = 0; free(pending_idfs[i]); continue; }
+                ts_marquer_init(pending_idfs[i]);
+                quadr(":=", $3, "", pending_idfs[i]);
+                ts_set_val(pending_idfs[i], $3);
+                free(pending_idfs[i]);
+            }
+            pending_count = 0;
+            if (ok) printf("Declaration de variable(s) avec initialisation correcte.\n");
+        }
+    | SEP_LBRACKET type SEP_SEMICOLON NUM_INT SEP_RBRACKET SEP_SEMICOLON
+        {
+            /* $4 = taille (NUM_INT) */
+            if (pending_count != 1) {
+                printf(RED "ERREUR semantique: un tableau ne peut avoir qu'un seul nom, ligne %d, col %d" RESET "\n",
+                       nb_ligne, nb_col);
+                semantic_errors++;
+            } else if ($4 <= 0) {
+                printf(RED "ERREUR semantique: taille de tableau invalide pour '%s', ligne %d, col %d" RESET "\n",
+                       pending_idfs[0], nb_ligne, nb_col);
+            } else {
+                ts_inserer_tableau(pending_idfs[0], type_courant, $4);
+                printf("Declaration de tableau correcte.\n");
+            }
+            for (int i = 0; i < pending_count; i++) free(pending_idfs[i]);
+            pending_count = 0;
         }
     ;
 
 decl_constante
     : CONST_MC IDF SEP_COLON type OP_INIT valeur SEP_SEMICOLON
         {
-            ts_inserer_constante($2, type_courant);
-            ts_marquer_init($2);/* Marquer la constante comme initialisee */
-            generer_quad(":=", $sval6, "", $2);
-            printf("Declaration de constante correcte.\n");
+            if (ts_inserer_constante($2, type_courant)) {
+                ts_marquer_init($2);
+                quadr(":=", $6, "", $2);
+                ts_set_val($2, $6);
+                printf("Declaration de constante correcte.\n");
+            }
         }
     ;
 
 liste_idf
     : IDF
-        { ts_inserer_variable($1, type_courant); }
+        {
+            if (pending_count < MAX_PENDING_IDF)
+                pending_idfs[pending_count++] = strdup($1);
+        }
     | IDF SEP_PIPE liste_idf
-        { ts_inserer_variable($1, type_courant); }
+        {
+            if (pending_count < MAX_PENDING_IDF)
+                pending_idfs[pending_count++] = strdup($1);
+        }
     ;
 
 type
@@ -147,11 +199,17 @@ type
 
 valeur
     : NUM_INT
+        { $$ = (char*)malloc(20); sprintf($$, "%d", $1); }
     | NUM_FLOAT
+        { $$ = (char*)malloc(20); sprintf($$, "%f", $1); }
     | SEP_LPAREN OP_ADD NUM_INT SEP_RPAREN
+        { $$ = (char*)malloc(20); sprintf($$, "%d", $3); }
     | SEP_LPAREN OP_SUB NUM_INT SEP_RPAREN
+        { $$ = (char*)malloc(20); sprintf($$, "%d", -$3); }
     | SEP_LPAREN OP_ADD NUM_FLOAT SEP_RPAREN
+        { $$ = (char*)malloc(20); sprintf($$, "%f", $3); }
     | SEP_LPAREN OP_SUB NUM_FLOAT SEP_RPAREN
+        { $$ = (char*)malloc(20); sprintf($$, "%f", -$3); }
     ;
 
 liste_instructions
@@ -172,28 +230,31 @@ instruction_affectation
     : IDF OP_ASSIGN expression SEP_SEMICOLON
         {
             if (!ts_est_declare($1)) {
-                printf("ERREUR semantique: variable '%s' non declaree, ligne %d, col %d\n",
+                printf(RED "ERREUR semantique: variable '%s' non declaree, ligne %d, col %d" RESET "\n",
                        $1, nb_ligne, nb_col);
+                semantic_errors++;
             } else if (ts_est_constante($1)) {
-                printf("ERREUR semantique: modification de la constante '%s', ligne %d, col %d\n",
+                printf(RED "ERREUR semantique: modification de la constante '%s', ligne %d, col %d" RESET "\n",
                        $1, nb_ligne, nb_col);
+                semantic_errors++;
             } else {
-                generer_quad(":=", $3, "", $1);
+                quadr(":=", $3, "", $1);
                 ts_marquer_init($1);
+                printf("Affectation correcte.\n");
             }
-            printf("Affectation correcte.\n");
         }
     | IDF SEP_LBRACKET expression SEP_RBRACKET OP_ASSIGN expression SEP_SEMICOLON
         {
             if (!ts_est_declare($1)) {
-                printf("ERREUR semantique: tableau '%s' non declare, ligne %d, col %d\n",
+                printf(RED "ERREUR semantique: tableau '%s' non declare, ligne %d, col %d" RESET "\n",
                        $1, nb_ligne, nb_col);
+                semantic_errors++;
             } else {
-                char dest[MAX_ARG]; /*taille max dun argument dans un quadruplet*/
-                sprintf(dest, "%s[%s]", $1, $3); /* T[1]*/
-                generer_quad(":=", $6, "", dest); /*we affect result in T[1]*/
+                char dest[100];
+                sprintf(dest, "%s[%s]", $1, $3);
+                quadr(":=", $6, "", dest);
+                printf("Affectation tableau correcte.\n");
             }
-            printf("Affectation tableau correcte.\n");
         }
     ;
 
@@ -202,49 +263,50 @@ instruction_condition
       SEP_LBRACE
         {
             /* BZ: si condition fausse, sauter */
-            generer_quad("BZ", $3, "", "");
+            quadr("BZ", $3, "", "");
         }
       liste_instructions SEP_RBRACE
-      ELSE_MC
+      suite_if
+    ;
+
+/* suite_if lit 1 token de lookahead (ELSE_MC ou ENDIF_MC) => LALR(1) sans conflit */
+suite_if
+    : ELSE_MC
         {
             /* BR: sauter le bloc else */
-            generer_quad("BR", "", "", "");
-            /* Mettre a jour le BZ pour pointer ici */
+            quadr("BR", "", "", "");
+            /* Patcher le BZ vers le debut du else */
             char idx_str[20];
             sprintf(idx_str, "%d", qc);
-            maj_quad(qc - 1 - 1, idx_str);  /* le BZ est 2 avant */
+            for (int i = qc - 2; i >= 0; i--) {
+                if (strcmp(quad[i].oper, "BZ") == 0 && strlen(quad[i].res) == 0) {
+                    updateQuad(i, 3, idx_str);
+                    break;
+                }
+            }
         }
       SEP_LBRACE liste_instructions SEP_RBRACE
       ENDIF_MC SEP_SEMICOLON
         {
-            /* Mettre a jour le BR pour pointer apres le else */
+            /* Patcher le BR vers apres le else */
             char idx_str[20];
-            sprintf(idx_str, "%d", qc); /*index de la prochaine instruction, donc apres le else*/
-            /* Trouver le BR genere avant le else */
-            int br_idx = -1; /*-1 signifie non trouve*/
-            for (int i = qc - 1; i >= 0; i--) { /*qc pointe vers case vide lzm -1*/
-                if (strcmp(quads[i].op, "BR") == 0 && strlen(quads[i].result) == 0) {
-                    br_idx = i;
+            sprintf(idx_str, "%d", qc);
+            for (int i = qc - 1; i >= 0; i--) {
+                if (strcmp(quad[i].oper, "BR") == 0 && strlen(quad[i].res) == 0) {
+                    updateQuad(i, 3, idx_str);
                     break;
                 }
             }
-            if (br_idx >= 0) maj_quad(br_idx, idx_str);/*metre a jour quad de Bravec index fin*/
             printf("Instruction if-else correcte.\n");
         }
-    | IF_MC SEP_LPAREN condition SEP_RPAREN THEN_MC SEP_COLON
-      SEP_LBRACE
+    | ENDIF_MC SEP_SEMICOLON
         {
-            generer_quad("BZ", $3, "", "");
-        }
-      liste_instructions SEP_RBRACE
-      ENDIF_MC SEP_SEMICOLON
-        {
+            /* Patcher le BZ vers apres le then */
             char idx_str[20];
             sprintf(idx_str, "%d", qc);
-            /* Mettre a jour le BZ */
             for (int i = qc - 1; i >= 0; i--) {
-                if (strcmp(quads[i].op, "BZ") == 0 && strlen(quads[i].result) == 0) {
-                    maj_quad(i, idx_str);
+                if (strcmp(quad[i].oper, "BZ") == 0 && strlen(quad[i].res) == 0) {
+                    updateQuad(i, 3, idx_str);
                     break;
                 }
             }
@@ -254,30 +316,29 @@ instruction_condition
 
 instruction_loop_while
     : LOOP_MC WHILE_MC SEP_LPAREN
+      { debut_condition = qc; } /* Sauvegarder le debut de l'evaluation de la condition */
       condition SEP_RPAREN
-        { /* in the case condition is false */
-            generer_quad("BZ", $4, "", "");        }
+        { /* si condition fausse, sauter hors de la boucle */
+            quadr("BZ", $5, "", "");
+        }
       SEP_LBRACE liste_instructions SEP_RBRACE
       ENDLOOP_MC SEP_SEMICOLON
         {
+            /* Generer BR qui retourne au debut de la condition */
             char debut_str[20];
-            /* trouver le BZ le plus recent non patche */
+            sprintf(debut_str, "%d", debut_condition);
+            quadr("BR", "", "", debut_str);
+            /* Mettre a jour le BZ pour pointer apres la boucle */
+            char fin_str[20];
+            sprintf(fin_str, "%d", qc);
             int bz_idx = -1;
-            for (int i = qc - 1; i >= 0; i--) {
-                if (strcmp(quads[i].op, "BZ") == 0 && strlen(quads[i].result) == 0) { /*we search for BZ*/
-                    bz_idx = i; /*we found position of BZ index*/
+            for (int i = qc - 2; i >= 0; i--) { /* qc-1 est le BR qu'on vient de generer */
+                if (strcmp(quad[i].oper, "BZ") == 0 && strlen(quad[i].res) == 0) {
+                    bz_idx = i;
                     break;
                 }
             }
-            /* Le debut est juste avant le BZ (la condition) */
-            /* On genere BR vers debut_condition */
-            if (bz_idx >= 0) { /*we found deb de la boucle*/
-                sprintf(debut_str, "%d", bz_idx - 1 >= 0 ? bz_idx - 1 : 0); /*if its - then use 0 to avoid idce negative*/
-                generer_quad("BR", "", "", debut_str); /*debut de la boucle, we generate BR*/
-                char fin_str[20];
-                sprintf(fin_str, "%d", qc);
-                maj_quad(bz_idx, fin_str); /*we update BZ of position of Fin */
-            }
+            if (bz_idx >= 0) updateQuad(bz_idx, 3, fin_str);
             printf("Boucle while correcte.\n");
         }
     ;
@@ -286,28 +347,30 @@ instruction_for
     : FOR_MC IDF IN_MC expression TO_MC expression
         {
             if (!ts_est_declare($2)) {
-                printf("ERREUR semantique: variable '%s' non declaree, ligne %d, col %d\n",
+                printf(RED "ERREUR semantique: variable '%s' non declaree, ligne %d, col %d" RESET "\n",
                        $2, nb_ligne, nb_col);
+                semantic_errors++;
             }
             /* Initialiser i <- debut */
-            generer_quad(":=", $4, "", $2);
+            quadr(":=", $4, "", $2);
+            ts_marquer_init($2);
             /* Condition: i <= fin */
             char *tmp = strdup(nouveau_temp());
-            generer_quad("<=", $2, $6, tmp);
-            generer_quad("BZ", tmp, "", "");
+            quadr("<=", $2, $6, tmp);
+            quadr("BZ", tmp, "", "");
         }
       SEP_LBRACE liste_instructions SEP_RBRACE
       ENDFOR_MC SEP_SEMICOLON
         {
             /* Incrementer i <- i + 1 */
             char *tmp = strdup(nouveau_temp());
-            generer_quad("+", $2, "1", tmp); /*incrementer avec 1*/
-            generer_quad(":=", tmp, "", $2);/*affecter a IDF*/
+            quadr("+", $2, "1", tmp); /*incrementer avec 1*/
+            quadr(":=", tmp, "", $2);/*affecter a IDF*/
             /* BR vers la condition */
             /* Trouver le BZ non patche */
             int bz_idx = -1;
             for (int i = qc - 1; i >= 0; i--) {
-                if (strcmp(quads[i].op, "BZ") == 0 && strlen(quads[i].result) == 0) {
+                if (strcmp(quad[i].oper, "BZ") == 0 && strlen(quad[i].res) == 0) {
                     bz_idx = i;
                     break;
                 }
@@ -315,10 +378,10 @@ instruction_for
             if (bz_idx >= 0) {
                 char cond_str[20];
                 sprintf(cond_str, "%d", bz_idx - 1);
-                generer_quad("BR", "", "", cond_str);
+                quadr("BR", "", "", cond_str);
                 char fin_str[20];
                 sprintf(fin_str, "%d", qc);
-                maj_quad(bz_idx, fin_str);
+                updateQuad(bz_idx, 3, fin_str);
             }
             printf("Boucle for correcte.\n");
         }
@@ -328,12 +391,14 @@ instruction_input
     : INPUT_MC SEP_LPAREN IDF SEP_RPAREN SEP_SEMICOLON
         {
             if (!ts_est_declare($3)) {
-                printf("ERREUR semantique: variable '%s' non declaree, ligne %d, col %d\n",
+                printf(RED "ERREUR semantique: variable '%s' non declaree, ligne %d, col %d" RESET "\n",
                        $3, nb_ligne, nb_col);
+                semantic_errors++;
+            } else {
+                quadr("input", "", "", $3);
+                ts_marquer_init($3);
+                printf("Instruction input correcte.\n");
             }
-            generer_quad("input", "", "", $3);
-            ts_marquer_init($3);
-            printf("Instruction input correcte.\n");
         }
     ;
 
@@ -348,85 +413,97 @@ liste_out
     ;
 
 element_out
-    : STRING     { generer_quad("out", $1, "", ""); }
+    : STRING     { quadr("out", $1, "", ""); }
     | IDF        {
                     if (!ts_est_declare($1)) {
-                        printf("ERREUR semantique: variable '%s' non declaree, ligne %d, col %d\n",
+                        printf(RED "ERREUR semantique: variable '%s' non declaree, ligne %d, col %d" RESET "\n",
                                $1, nb_ligne, nb_col);
+                        semantic_errors++;
                     }
-                    generer_quad("out", $1, "", "");
+                    quadr("out", $1, "", "");
                  }
     | NUM_INT    {
                     char s[20]; sprintf(s, "%d", $1);
-                    generer_quad("out", s, "", "");
+                    quadr("out", s, "", "");
                  }
     | NUM_FLOAT  {
                     char s[20]; sprintf(s, "%f", $1);
-                    generer_quad("out", s, "", "");
+                    quadr("out", s, "", "");
                  }
     ;
 
 
 condition
     : expression OP_EQ expression
-        { $$ = strdup(nouveau_temp()); generer_quad("==", $1, $3, $$); } /*we need to ;ut result in temp, $$ cant just affect to it like that*/
+        { $$ = strdup(nouveau_temp()); quadr("==", $1, $3, $$); } /*we need to ;ut result in temp, $$ cant just affect to it like that*/
     | expression OP_NE expression
-        { $$ = strdup(nouveau_temp()); generer_quad("!=", $1, $3, $$); }
+        { $$ = strdup(nouveau_temp()); quadr("!=", $1, $3, $$); }
     | expression OP_LT expression
-        { $$ = strdup(nouveau_temp()); generer_quad("<",  $1, $3, $$); }
+        { $$ = strdup(nouveau_temp()); quadr("<",  $1, $3, $$); }
     | expression OP_GT expression
-        { $$ = strdup(nouveau_temp()); generer_quad(">",  $1, $3, $$); }
+        { $$ = strdup(nouveau_temp()); quadr(">",  $1, $3, $$); }
     | expression OP_LE expression
-        { $$ = strdup(nouveau_temp()); generer_quad("<=", $1, $3, $$); }
+        { $$ = strdup(nouveau_temp()); quadr("<=", $1, $3, $$); }
     | expression OP_GE expression
-        { $$ = strdup(nouveau_temp()); generer_quad(">=", $1, $3, $$); }
-    | SEP_LPAREN condition AND condition SEP_RPAREN
-        { $$ = strdup(nouveau_temp()); generer_quad("AND", $2, $4, $$); }
-    | SEP_LPAREN condition OR  condition SEP_RPAREN
-        { $$ = strdup(nouveau_temp()); generer_quad("OR",  $2, $4, $$); }
+        { $$ = strdup(nouveau_temp()); quadr(">=", $1, $3, $$); }
+    | condition AND condition
+        { $$ = strdup(nouveau_temp()); quadr("AND", $1, $3, $$); }
+    | condition OR  condition
+        { $$ = strdup(nouveau_temp()); quadr("OR",  $1, $3, $$); }
     | NON SEP_LPAREN condition SEP_RPAREN
-        { $$ = strdup(nouveau_temp()); generer_quad("NON", $3, "",  $$); }
+        { $$ = strdup(nouveau_temp()); quadr("NON", $3, "",  $$); }
+    | SEP_LPAREN condition SEP_RPAREN
+        { $$ = $2; }
     ;
 
 
 expression
     : expression OP_ADD expression
-        { $$ = strdup(nouveau_temp()); generer_quad("+", $1, $3, $$); }
+        { $$ = strdup(nouveau_temp()); quadr("+", $1, $3, $$); }
     | expression OP_SUB expression
-        { $$ = strdup(nouveau_temp()); generer_quad("-", $1, $3, $$); }
+        { $$ = strdup(nouveau_temp()); quadr("-", $1, $3, $$); }
     | expression OP_MUL expression
-        { $$ = strdup(nouveau_temp()); generer_quad("*", $1, $3, $$); }
+        { $$ = strdup(nouveau_temp()); quadr("*", $1, $3, $$); }
     | expression OP_DIV expression
         {
-            /* Verification division par zero */
-            if (strcmp($3, "0") == 0 || strcmp($3, "0.0") == 0) {
-                printf("ERREUR semantique: division par zero, ligne %d, col %d\n",
-                       nb_ligne, nb_col);
+            /* Verification division par zero: litteral ou constante de valeur 0 */
+            int div_zero = (strcmp($3, "0") == 0 || strcmp($3, "0.0") == 0);
+            if (!div_zero) {
+                const char *v = ts_get_val($3);
+                if (v && (strcmp(v, "0") == 0 || strcmp(v, "0.0") == 0))
+                    div_zero = 1;
             }
-            $$ = strdup(nouveau_temp()); generer_quad("/", $1, $3, $$);
+            if (div_zero) {
+                printf(RED "ERREUR semantique: division par zero (diviseur '%s' vaut 0), ligne %d, col %d" RESET "\n",
+                       $3, nb_ligne, nb_col);
+                semantic_errors++;
+            }
+            $$ = strdup(nouveau_temp()); quadr("/", $1, $3, $$);
         }
     | SEP_LPAREN expression SEP_RPAREN
         { $$ = $2; }
     | SEP_LPAREN OP_ADD expression SEP_RPAREN
         { $$ = $3; }
     | SEP_LPAREN OP_SUB expression SEP_RPAREN
-        { $$ = strdup(nouveau_temp()); generer_quad("NEG", $3, "", $$); }
+        { $$ = strdup(nouveau_temp()); quadr("NEG", $3, "", $$); }
     | IDF
         {
             if (!ts_est_declare($1)) {
-                printf("ERREUR semantique: variable '%s' non declaree, ligne %d, col %d\n",
+                printf(RED "ERREUR semantique: variable '%s' non declaree, ligne %d, col %d" RESET "\n",
                        $1, nb_ligne, nb_col);
+                semantic_errors++;
             }
             $$ = $1;
         }
     | IDF SEP_LBRACKET expression SEP_RBRACKET
         {
             if (!ts_est_declare($1)) {
-                printf("ERREUR semantique: tableau '%s' non declare, ligne %d, col %d\n",
+                printf(RED "ERREUR semantique: tableau '%s' non declare, ligne %d, col %d" RESET "\n",
                        $1, nb_ligne, nb_col);
+                semantic_errors++;
             }
             $$ = strdup(nouveau_temp());
-            generer_quad("TAB", $1, $3, $$);
+            quadr("TAB", $1, $3, $$);
         }
     | NUM_INT
         {
@@ -457,6 +534,6 @@ int yywrap()
 
 int yyerror(char *msg)
 {
-    printf("ERREUR syntaxique: %s, ligne %d, col %d\n", msg, nb_ligne, nb_col);
+    printf(RED "ERREUR syntaxique: %s, ligne %d, col %d" RESET "\n", msg, nb_ligne, nb_col);
     return 1;
 }
