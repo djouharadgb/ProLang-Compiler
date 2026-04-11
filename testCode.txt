@@ -1,0 +1,53 @@
+BeginProject mon_projet;
+
+Setup :
+    %% declarations des variables
+    define x1 | y2 | res : integer;
+    define taux : float;
+    const max14 : integer = 100;
+
+Run :
+{
+
+    %% affectations simples
+    x1 <- 10;
+    y2 <- 3;
+    taux <- 3.14;
+
+    %% operations arithmetiques
+    res <- x1 + y2 * 2;
+    res <- (x1 - y2) / 2;
+
+    %% comparaisons
+    if (x1 > y2) then:
+    {
+        res <- x1;
+    } else {
+        res <- y2;
+    } endIf;
+
+    %% operateurs logiques
+    if ((x1 >= 0) AND (y2 <= 100)) then:
+    {
+        res <- x1;
+    } endIf;
+
+    if (NON (x1 == y2)) then:
+    {
+        res <- 0;
+    } endIf;
+
+    %% boucle while
+    loop while (res != 0) {
+        res <- res - 1;
+    } endloop;
+
+    %% boucle for
+    for i in 1 to 10 {
+        res <- res + i;
+    } endfor;
+
+    out("valeur de res : ", res);
+}
+
+EndProject;
