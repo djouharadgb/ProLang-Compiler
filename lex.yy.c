@@ -912,7 +912,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 31:
 YY_RULE_SETUP
-#line 68 "prolang.l"
+#line 69 "prolang.l"
 {
                         nb_col += yyleng;
                         yylval.fval = atof(yytext);
@@ -921,7 +921,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 32:
 YY_RULE_SETUP
-#line 73 "prolang.l"
+#line 74 "prolang.l"
 {
                         nb_col += yyleng;
                         yylval.ival = atoi(yytext);
@@ -934,7 +934,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 33:
 YY_RULE_SETUP
-#line 82 "prolang.l"
+#line 83 "prolang.l"
 {
                         nb_col += yyleng;
                         yylval.sval = strdup(yytext);
@@ -943,127 +943,127 @@ YY_RULE_SETUP
 	YY_BREAK
 case 34:
 YY_RULE_SETUP
-#line 88 "prolang.l"
+#line 89 "prolang.l"
 { nb_col += yyleng; ts_inserer_sep("==", "OP_EQ");    return OP_EQ;     }
 	YY_BREAK
 case 35:
 YY_RULE_SETUP
-#line 89 "prolang.l"
+#line 90 "prolang.l"
 { nb_col += yyleng; ts_inserer_sep("!=", "OP_NE");    return OP_NE;     }
 	YY_BREAK
 case 36:
 YY_RULE_SETUP
-#line 90 "prolang.l"
+#line 91 "prolang.l"
 { nb_col += yyleng; ts_inserer_sep(">=", "OP_GE");    return OP_GE;     }
 	YY_BREAK
 case 37:
 YY_RULE_SETUP
-#line 91 "prolang.l"
+#line 92 "prolang.l"
 { nb_col += yyleng; ts_inserer_sep("<=", "OP_LE");    return OP_LE;     }
 	YY_BREAK
 case 38:
 YY_RULE_SETUP
-#line 92 "prolang.l"
+#line 93 "prolang.l"
 { nb_col += yyleng; ts_inserer_sep("<-", "OP_ASSIGN"); return OP_ASSIGN;  }
 	YY_BREAK
 case 39:
 YY_RULE_SETUP
-#line 93 "prolang.l"
+#line 94 "prolang.l"
 { nb_col += yyleng; ts_inserer_sep(">",  "OP_GT");    return OP_GT;     }
 	YY_BREAK
 case 40:
 YY_RULE_SETUP
-#line 94 "prolang.l"
+#line 95 "prolang.l"
 { nb_col += yyleng; ts_inserer_sep("<",  "OP_LT");    return OP_LT;     }
 	YY_BREAK
 case 41:
 YY_RULE_SETUP
-#line 96 "prolang.l"
+#line 97 "prolang.l"
 { nb_col += yyleng; ts_inserer_sep("=",  "OP_INIT");  return OP_INIT;   }
 	YY_BREAK
 case 42:
 YY_RULE_SETUP
-#line 97 "prolang.l"
+#line 98 "prolang.l"
 { nb_col += yyleng; ts_inserer_sep("+",  "OP_ADD");   return OP_ADD;    }
 	YY_BREAK
 case 43:
 YY_RULE_SETUP
-#line 98 "prolang.l"
+#line 99 "prolang.l"
 { nb_col += yyleng; ts_inserer_sep("-",  "OP_SUB");   return OP_SUB;    }
 	YY_BREAK
 case 44:
 YY_RULE_SETUP
-#line 99 "prolang.l"
+#line 100 "prolang.l"
 { nb_col += yyleng; ts_inserer_sep("*",  "OP_MUL");   return OP_MUL;    }
 	YY_BREAK
 case 45:
 YY_RULE_SETUP
-#line 100 "prolang.l"
+#line 101 "prolang.l"
 { nb_col += yyleng; ts_inserer_sep("/",  "OP_DIV");   return OP_DIV;    }
 	YY_BREAK
 case 46:
 YY_RULE_SETUP
-#line 102 "prolang.l"
+#line 103 "prolang.l"
 { nb_col += yyleng; ts_inserer_sep(";",  "SEP_SEMICOLON"); return SEP_SEMICOLON; }
 	YY_BREAK
 case 47:
 YY_RULE_SETUP
-#line 103 "prolang.l"
+#line 104 "prolang.l"
 { nb_col += yyleng; ts_inserer_sep(":",  "SEP_COLON");     return SEP_COLON;     }
 	YY_BREAK
 case 48:
 YY_RULE_SETUP
-#line 104 "prolang.l"
+#line 105 "prolang.l"
 { nb_col += yyleng; ts_inserer_sep(",",  "SEP_COMMA");     return SEP_COMMA;     }
 	YY_BREAK
 case 49:
 YY_RULE_SETUP
-#line 105 "prolang.l"
+#line 106 "prolang.l"
 { nb_col += yyleng; ts_inserer_sep("|",  "SEP_PIPE");      return SEP_PIPE;      }
 	YY_BREAK
 case 50:
 YY_RULE_SETUP
-#line 106 "prolang.l"
+#line 107 "prolang.l"
 { nb_col += yyleng; ts_inserer_sep("[",  "SEP_LBRACKET");  return SEP_LBRACKET;  }
 	YY_BREAK
 case 51:
 YY_RULE_SETUP
-#line 107 "prolang.l"
+#line 108 "prolang.l"
 { nb_col += yyleng; ts_inserer_sep("]",  "SEP_RBRACKET");  return SEP_RBRACKET;  }
 	YY_BREAK
 case 52:
 YY_RULE_SETUP
-#line 108 "prolang.l"
+#line 109 "prolang.l"
 { nb_col += yyleng; ts_inserer_sep("{",  "SEP_LBRACE");    return SEP_LBRACE;    }
 	YY_BREAK
 case 53:
 YY_RULE_SETUP
-#line 109 "prolang.l"
+#line 110 "prolang.l"
 { nb_col += yyleng; ts_inserer_sep("}",  "SEP_RBRACE");    return SEP_RBRACE;    }
 	YY_BREAK
 case 54:
 YY_RULE_SETUP
-#line 110 "prolang.l"
+#line 111 "prolang.l"
 { nb_col += yyleng; ts_inserer_sep("(",  "SEP_LPAREN");    return SEP_LPAREN;    }
 	YY_BREAK
 case 55:
 YY_RULE_SETUP
-#line 111 "prolang.l"
+#line 112 "prolang.l"
 { nb_col += yyleng; ts_inserer_sep(")",  "SEP_RPAREN");    return SEP_RPAREN;    }
 	YY_BREAK
 case 56:
 YY_RULE_SETUP
-#line 113 "prolang.l"
+#line 114 "prolang.l"
 { nb_col += yyleng; }
 	YY_BREAK
 case 57:
 YY_RULE_SETUP
-#line 114 "prolang.l"
+#line 115 "prolang.l"
 { nb_ligne++; nb_col = 1; }
 	YY_BREAK
 case 58:
 YY_RULE_SETUP
-#line 116 "prolang.l"
+#line 117 "prolang.l"
 {
                         printf(RED "ERREUR lexicale: caractere inconnu '%s', ligne %d, col %d" RESET "\n",
                                yytext, nb_ligne, nb_col);
@@ -1072,7 +1072,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 59:
 YY_RULE_SETUP
-#line 122 "prolang.l"
+#line 123 "prolang.l"
 ECHO;
 	YY_BREAK
 #line 1079 "lex.yy.c"
@@ -1962,5 +1962,5 @@ int main()
 	return 0;
 	}
 #endif
-#line 122 "prolang.l"
+#line 123 "prolang.l"
 

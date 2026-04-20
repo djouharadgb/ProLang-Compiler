@@ -14,6 +14,6 @@
  * Toutes les passes sont appliquees en boucle jusqu'a point fixe.
  */
 
-void optimize_quads(void);
+void optimiser_quadruplets(void);
 
 #endif /* OPT_H */

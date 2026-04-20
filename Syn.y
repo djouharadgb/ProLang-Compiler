@@ -99,7 +99,7 @@ programme
             ts_afficher();
             printf("\n=== Code intermediaire AVANT optimisation ===\n");
             afficher_qdr();
-            optimize_quads();
+            optimiser_quadruplets();
             printf("\n=== Code intermediaire APRES optimisation ===\n");
             afficher_qdr();
             YYACCEPT;

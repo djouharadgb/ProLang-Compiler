@@ -65,6 +65,7 @@ saut_ligne  \n
                             return IDF;
                         }
                     }
+
 {float_num}         {
                         nb_col += yyleng;
                         yylval.fval = atof(yytext);
