@@ -6,6 +6,7 @@
 #define RESET "\033[0m"
 #include "ts.h"
 #include "quad.h"
+#include "opt.h"
 
 int  yylex(void);
 int  yyerror(char *msg);
@@ -96,6 +97,10 @@ programme
             else
                 printf(RED "\n%d erreur(s) semantique(s) detectee(s) - analyse terminee avec erreurs." RESET "\n", semantic_errors);
             ts_afficher();
+            printf("\n=== Code intermediaire AVANT optimisation ===\n");
+            afficher_qdr();
+            optimize_quads();
+            printf("\n=== Code intermediaire APRES optimisation ===\n");
             afficher_qdr();
             YYACCEPT;
         }
