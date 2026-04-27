@@ -1,3 +1,11 @@
+/* ================================================================
+   ts.h  —  Table des Symboles pour ProLang
+   Implémentation : Table de Hachage (FNV-1) + Listes Chaînées
+   ================================================================
+   Chaque case du tableau de hachage pointe vers une liste chaînée
+   de noeuds (collision résolue par chaînage externe).
+   ================================================================ */
+
 #ifndef TS_H
 #define TS_H
 
@@ -5,56 +13,71 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define MAX_TS   200   /* taille table IDF / CONST / TABLEAU */
-#define MAX_SM    50   /* taille tables mots-cles et separateurs */
-#define MAX_IDF   19   /* longueur max d'un identifiant */
+/* ----------------------------------------------------------------
+   Constantes générales
+   ---------------------------------------------------------------- */
+#define MAX_IDF     14          /* longueur max d'un identificateur  */
+#define HASH_SIZE   64          /* nombre de cases dans la table de hachage*/
+#define MAX_SM      100         /* taille des tables mots-clés / séparateurs*/
 
-/* Types et natures — gardes pour compatibilite avec Syn.y */
-typedef enum { TYPE_INTEGER, TYPE_FLOAT }             TypeVar;
-typedef enum { NATURE_VAR, NATURE_CONST, NATURE_TABLEAU } NatureVar;
+typedef enum {
+    TYPE_INTEGER,   /* type entier  (integer) */
+    TYPE_FLOAT      /* type réel    (float)   */
+} TypeVar;
 
-/* -------- Table des IDFs / Constantes / Tableaux -------- */
+/* ================================================================
+   NOEUD de la liste chaînée  (entrée dans la table des symboles)
+   ================================================================ */
+typedef struct NoeudTS {
+    char  name[MAX_IDF + 1]; /* nom de l'identificateur / constante / tableau */
+    char  code[10];          /* catégorie : "IDF", "CONST", "TABLEAU"          */
+    char  type[10];          /* type      : "integer" ou "float"               */
+    char  val[20];           /* valeur initiale ou taille (tableau)            */
+    int   state;             /* 1 = occupé, 0 = supprimé        */
+
+   struct NoeudTS *suivant; /* pointeur vers le prochain noeud  */
+} NoeudTS;
+
+extern NoeudTS *hashTable[HASH_SIZE]; /* tableau de pointeurs (têtes de listes) */
+extern int      cpt;                  /* nombre total d'entrées dans la TS       */
+
 typedef struct {
-    int  state;        /* 0: libre, 1: occupe            */
-    char name[20];     /* nom de l'identifiant           */
-    char code[20];     /* "IDF", "CONST" ou "TABLEAU"   */
-    char type[20];     /* "integer" ou "float"           */
-    char val[20];      /* valeur initiale / taille / "" */
-} TypeTS;
-
-/* -------- Table des mots-cles et separateurs -------- */
-typedef struct {
-    int  state;
-    char name[20];     /* texte du lexeme (ex: "if", ";") */
-    char type[20];     /* token Bison (ex: "IF_MC")        */
+    int  state;       /* 1 = occupé */
+    char name[20];    /* lexème du mot-clé         */
+    char type[20];    /* token associé              */
 } TypeSM;
 
-extern TypeTS TS[MAX_TS];
-extern TypeSM tabM[MAX_SM];   /* mots-cles   */
-extern TypeSM tabS[MAX_SM];   /* separateurs */
-extern int cpt, cptm, cpts;
-
-/* Compteur global d'erreurs semantiques */
+extern TypeSM tabM[MAX_SM]; /* table des mots-clés   */
+extern TypeSM tabS[MAX_SM]; /* table des séparateurs */
+extern int    cptm;         /* nb de mots-clés       */
+extern int    cpts;         /* nb de séparateurs     */
 extern int semantic_errors;
 
-/* -------- API -------- */
-void ts_initialiser(void);
 
+/* Initialisation / libération */
+void ts_initialiser(void);
+void ts_liberer(void);
+
+/* Vérifications */
+int  ts_double_declaration(const char *nom);
+int  ts_est_declare       (const char *nom);
+int  ts_est_constante     (const char *nom);
+
+/* Lecture / écriture de valeur */
+void        ts_marquer_init(const char *nom);
+void        ts_set_val     (const char *nom, const char *val);
+const char *ts_get_val     (const char *nom);
+
+/* Insertions dans la TS principale */
 int  ts_inserer_variable (const char *nom, TypeVar type);
 int  ts_inserer_constante(const char *nom, TypeVar type);
 int  ts_inserer_tableau  (const char *nom, TypeVar type, int taille);
 
+/* Insertions dans les tables auxiliaires */
 void ts_inserer_mc (const char *nom, const char *token);
 void ts_inserer_sep(const char *nom, const char *token);
 
-int  ts_est_declare       (const char *nom);
-int  ts_est_constante     (const char *nom);
-int  ts_double_declaration(const char *nom);
-void ts_marquer_init      (const char *nom);
-void        ts_set_val    (const char *nom, const char *val);
-const char *ts_get_val    (const char *nom);
-
+/* Affichage */
 void ts_afficher(void);
-void ts_liberer (void);
 
-#endif
+#endif 

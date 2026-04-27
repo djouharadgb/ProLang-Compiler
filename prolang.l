@@ -10,7 +10,7 @@
     #define RESET "\033[0m"
 %}
 
-letter      [A-Za-z]
+letter      [A-Za-z] /* */
 digit       [0-9]
 int_num     (0|[1-9][0-9]*)
 float_num   (0|[1-9][0-9]*)"."[0-9]+
@@ -23,12 +23,12 @@ saut_ligne  \n
 
 %%
 
-"//*"                  { BEGIN(COMMENT); }
-<COMMENT>"*//"         { BEGIN(INITIAL); }
-<COMMENT>{saut_ligne}  { nb_ligne++; nb_col = 1; }
-<COMMENT>.             { /* ignorer le contenu du commentaire */ }
+"//*"                  { BEGIN(COMMENT); } /*we use states . when we meet //, we enter state comment*/
+<COMMENT>"*//"         { BEGIN(INITIAL); } /*quand il rencontre *// , il rentre dans l'etat initial*/
+<COMMENT>{saut_ligne}  { nb_ligne++; nb_col = 1; } /*quand il rencontre saut de ligne , il fait*/
+<COMMENT>.             { /* ignorer le contenu du commentaire */ }/*quand il rencontre du nimporte quoi il l'ignore*/
 
-"%%"[^\n]*            { nb_col += yyleng; /* commentaire mono-ligne */ }
+"%%"[^\n]*            { nb_col += yyleng; } /* commentaire mono-ligne */
 
 "BeginProject"      { nb_col += yyleng; ts_inserer_mc("BeginProject", "BeginProject"); return BeginProject; }
 "EndProject"        { nb_col += yyleng; ts_inserer_mc("EndProject",   "EndProject");   return EndProject;   }
@@ -61,7 +61,7 @@ saut_ligne  \n
                             printf(RED "ERREUR lexicale: identificateur '%s' depasse 14 caracteres, ligne %d, col %d" RESET "\n",
                                    yytext, nb_ligne, nb_col - yyleng);
                         } else {
-                            yylval.sval = strdup(yytext);
+                            yylval.sval = strdup(yytext);/*yylval on stocke la valeur de l'identificateur et son type,sans yylval, it cant know which idf, strdup pour ne pas ecraser la val*/
                             return IDF;
                         }
                     }
@@ -90,7 +90,8 @@ saut_ligne  \n
 "!="                { nb_col += yyleng; ts_inserer_sep("!=", "OP_NE");    return OP_NE;     }
 ">="                { nb_col += yyleng; ts_inserer_sep(">=", "OP_GE");    return OP_GE;     }
 "<="                { nb_col += yyleng; ts_inserer_sep("<=", "OP_LE");    return OP_LE;     }
-"<-"                { nb_col += yyleng; ts_inserer_sep("<-", "OP_ASSIGN"); return OP_ASSIGN;  }
+"<--"                { nb_col += yyleng; ts_inserer_sep("<--", "OP_ASSIGN"); return OP_ASSIGN;  }
+"<-"                 { nb_col += yyleng; ts_inserer_sep("<-",  "OP_ASSIGN"); return OP_ASSIGN;  }
 ">"                 { nb_col += yyleng; ts_inserer_sep(">",  "OP_GT");    return OP_GT;     }
 "<"                 { nb_col += yyleng; ts_inserer_sep("<",  "OP_LT");    return OP_LT;     }
 
