@@ -1,11 +1,3 @@
-/* ================================================================
-   ts.h  —  Table des Symboles pour ProLang
-   Implémentation : Table de Hachage (FNV-1) + Listes Chaînées
-   ================================================================
-   Chaque case du tableau de hachage pointe vers une liste chaînée
-   de noeuds (collision résolue par chaînage externe).
-   ================================================================ */
-
 #ifndef TS_H
 #define TS_H
 
@@ -13,9 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* ----------------------------------------------------------------
-   Constantes générales
-   ---------------------------------------------------------------- */
 #define MAX_IDF     14          /* longueur max d'un identificateur  */
 #define HASH_SIZE   64          /* nombre de cases dans la table de hachage*/
 #define MAX_SM      100         /* taille des tables mots-clés / séparateurs*/

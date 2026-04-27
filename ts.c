@@ -1,34 +1,13 @@
 /* ================================================================
-   ts.c  —  Table des Symboles pour ProLang
-   Implémentation : Table de Hachage FNV-1 + Listes Chaînées
-   ================================================================
-
-   PRINCIPE :
-   ----------
-   On dispose d'un tableau  hashTable[0..HASH_SIZE-1]  où chaque
-   case est la tête d'une liste chaînée de NoeudTS.
-
-   Pour insérer/chercher un nom :
-     1. On calcule  h = fnv1(nom) % HASH_SIZE
-     2. On parcourt la liste  hashTable[h]  jusqu'à trouver le nom
-        (recherche) ou jusqu'à la fin (insertion).
-
-   Fonction de hachage : FNV-1  (Fowler–Noll–Vo, variante 1)
+Fonction de hachage : FNV-1  (Fowler–Noll–Vo, variante 1)
      hash = FNV_OFFSET_BASIS
      pour chaque octet b du nom :
          hash = hash * FNV_PRIME
          hash = hash XOR b
-
    ================================================================ */
-
 #include "ts.h"
-//Constantes FNV-1  (32 bits)
 #define FNV_OFFSET_BASIS 2166136261u  /* valeur initiale du hash FNV-1  */
 #define FNV_PRIME        16777619u    /* nombre premier FNV pour 32 bits */
-
-/* ================================================================
-   Variables globales  (déclarées extern dans ts.h)
-   ================================================================ */
 
 NoeudTS *hashTable[HASH_SIZE]; /* tableau de têtes de listes chaînées     */
 int      cpt  = 0;             /* nb total d'entrées IDF/CONST/TABLEAU    */
@@ -50,7 +29,7 @@ static unsigned int fnv1(const char *nom) {
         nom++;                    /* passer à l'octet suivant                  */
     }
 
-    return hash % HASH_SIZE; /* on ramène dans [0, HASH_SIZE-1] */
+    return hash % HASH_SIZE; 
 }
 
 /*RECHERCHE INTERNE */
@@ -69,20 +48,15 @@ static NoeudTS *ts_find(const char *nom) {
     return NULL; /* non trouvé */
 }
 
-/* ================================================================
-   CRÉATION D'UN NOUVEAU NOEUD
-   ================================================================
-   Alloue dynamiquement un NoeudTS et l'initialise.
-   ================================================================ */
+/*CRÉATION D'UN NOUVEAU NOEUD*/
+
 static NoeudTS *creer_noeud(const char *nom, const char *code,
                              const char *type_str, const char *val_str) {
-    /* Allouer la mémoire pour un nouveau noeud */
     NoeudTS *n = (NoeudTS *)malloc(sizeof(NoeudTS));
     if (!n) {
         fprintf(stderr, "ERREUR: malloc échoué pour NoeudTS\n");
         exit(1);
     }
-
     /* Remplir les champs */
     n->state = 1;                                          /* noeud actif          */
     strncpy(n->name, nom,      MAX_IDF); n->name[MAX_IDF] = '\0'; /* copier le nom */
@@ -101,28 +75,18 @@ static NoeudTS *creer_noeud(const char *nom, const char *code,
     return n;
 }
 
-/* ================================================================
-   INSERTION INTERNE dans la table de hachage
-   ================================================================
-   Calcule le seau h, puis insère le nouveau noeud EN TÊTE
-   de la liste chaînée  hashTable[h].
-   (Insertion en tête = O(1))
-   ================================================================ */
+/*INSERTION INTERNE dans la table de hachage*/
+
 static void ts_inserer_noeud(NoeudTS *n) {
     unsigned int h = fnv1(n->name); /* calculer le seau destination */
 
     /* Insérer en tête de liste : le nouveau noeud pointe vers l'ancienne tête */
     n->suivant = hashTable[h];
-    hashTable[h] = n;               /* la nouvelle tête est notre noeud         */
+    hashTable[h] = n;             
 
-    cpt++; /* incrémenter le compteur global */
+    cpt++; 
 }
 
-/* ================================================================
-   INITIALISATION
-   ================================================================
-   Remet toutes les structures à zéro.
-   ================================================================ */
 void ts_initialiser(void) {
     /* Mettre toutes les têtes de listes à NULL */
     for (int i = 0; i < HASH_SIZE; i++)
@@ -141,11 +105,7 @@ void ts_initialiser(void) {
     semantic_errors = 0;
 }
 
-/* ================================================================
-   LIBÉRATION DE LA MÉMOIRE
-   ================================================================
-   Libère tous les noeuds alloués dynamiquement.
-   ================================================================ */
+/* LIBÉRATION DE LA MÉMOIRE*/
 void ts_liberer(void) {
     /* Parcourir chaque seau de la table de hachage */
     for (int i = 0; i < HASH_SIZE; i++) {
@@ -168,9 +128,7 @@ void ts_liberer(void) {
     semantic_errors = 0;
 }
 
-/* ================================================================
-   VÉRIFICATIONS
-   ================================================================ */
+/* VÉRIFICATIONS */
 
 /* Retourne 1 si le nom est déjà déclaré dans la TS, 0 sinon */
 int ts_double_declaration(const char *nom) {
@@ -182,19 +140,15 @@ int ts_est_declare(const char *nom) {
     return ts_find(nom) != NULL ? 1 : 0;
 }
 
-/* Retourne 1 si le nom correspond à une constante (code == "CONST") */
+/* Retourne 1 si le nom correspond à une constante  */
 int ts_est_constante(const char *nom) {
     NoeudTS *n = ts_find(nom);
     /* Vérifier que le noeud existe ET que son code est "CONST" */
     return (n != NULL && strcmp(n->code, "CONST") == 0) ? 1 : 0;
 }
 
-/* ================================================================
-   LECTURE / ÉCRITURE DE VALEUR
-   ================================================================ */
 
-/* Marquer qu'une variable a été initialisée (on met "oui" dans val
-   seulement si val est encore vide, pour ne pas écraser une vraie valeur) */
+/* Marquer qu'une variable a été initialisée */
 void ts_marquer_init(const char *nom) {
     NoeudTS *n = ts_find(nom);
     if (n != NULL && n->val[0] == '\0')  /* val vide ? */
@@ -210,16 +164,14 @@ void ts_set_val(const char *nom, const char *val) {
     }
 }
 
-/* Retourner la valeur stockée pour un symbole (NULL si non trouvé) */
+/* Retourner la valeur stockée pour un symbole  */
 const char *ts_get_val(const char *nom) {
     NoeudTS *n = ts_find(nom);
     if (n != NULL) return n->val; /* retourner le champ val du noeud */
     return NULL;                  /* symbole introuvable              */
 }
 
-/* ================================================================
-   INSERTIONS DANS LA TABLE PRINCIPALE
-   ================================================================ */
+/*INSERTIONS DANS LA TABLE PRINCIPALE*/
 
 /* Insérer une VARIABLE simple (IDF) */
 int ts_inserer_variable(const char *nom, TypeVar type) {
@@ -287,10 +239,7 @@ int ts_inserer_tableau(const char *nom, TypeVar type, int taille) {
     return 1;
 }
 
-/* ================================================================
-   INSERTIONS DANS LES TABLES AUXILIAIRES  (listes linéaires)
-   Les mots-clés et séparateurs sont peu nombreux → tableau simple.
-   ================================================================ */
+/*INSERTIONS DANS LES TABLES AUXILIAIRES  */
 
 /* Insérer un mot-clé dans tabM (si pas déjà présent) */
 void ts_inserer_mc(const char *nom, const char *token) {
@@ -324,9 +273,7 @@ void ts_inserer_sep(const char *nom, const char *token) {
     cpts++;
 }
 
-/* ================================================================
-   AFFICHAGE DES TROIS TABLES
-   ================================================================ */
+/*AFFICHAGE DES TROIS TABLES*/
 void ts_afficher(void) {
 
     /* ---- Table principale : IDF / CONST / TABLEAU ---- */

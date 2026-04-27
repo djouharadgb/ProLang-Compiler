@@ -91,7 +91,6 @@ saut_ligne  \n
 ">="                { nb_col += yyleng; ts_inserer_sep(">=", "OP_GE");    return OP_GE;     }
 "<="                { nb_col += yyleng; ts_inserer_sep("<=", "OP_LE");    return OP_LE;     }
 "<--"                { nb_col += yyleng; ts_inserer_sep("<--", "OP_ASSIGN"); return OP_ASSIGN;  }
-"<-"                 { nb_col += yyleng; ts_inserer_sep("<-",  "OP_ASSIGN"); return OP_ASSIGN;  }
 ">"                 { nb_col += yyleng; ts_inserer_sep(">",  "OP_GT");    return OP_GT;     }
 "<"                 { nb_col += yyleng; ts_inserer_sep("<",  "OP_LT");    return OP_LT;     }
 
