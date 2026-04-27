@@ -99,7 +99,7 @@ typedef union YYSTYPE
 {
 
 /* Line 1676 of yacc.c  */
-#line 28 "Syn.y"
+#line 31 "Syn.y"
 
     int    ival;
     float  fval; /*flex stocke la val dans yylval et bison la recupere de $*/

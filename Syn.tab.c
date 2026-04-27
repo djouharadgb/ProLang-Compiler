@@ -92,12 +92,15 @@ TypeVar type_courant; /* Type courant des variables when we have multiple declar
 static char *pending_idfs[MAX_PENDING_IDF]; /*cas de plusierus declaration, bison ne connait pas le type encore*/
 static int pending_count = 0;
 
-/* Pour sauvegarder le debut de l'evaluation de la condition de boucle */
-static int debut_condition = 0;
+/* Contexte des boucles while imbriquees (debut condition + index BZ a patcher) */
+#define MAX_WHILE_NEST 100
+static int while_start_stack[MAX_WHILE_NEST]; /*index deb while*/
+static int while_bz_stack[MAX_WHILE_NEST]; /*index BZ a patcher: fin while*/
+static int while_top = -1;
 
 
 /* Line 189 of yacc.c  */
-#line 101 "Syn.tab.c"
+#line 104 "Syn.tab.c"
 
 /* Enabling traces.  */
 #ifndef YYDEBUG
@@ -184,7 +187,7 @@ typedef union YYSTYPE
 {
 
 /* Line 214 of yacc.c  */
-#line 28 "Syn.y"
+#line 31 "Syn.y"
 
     int    ival;
     float  fval; /*flex stocke la val dans yylval et bison la recupere de $*/
@@ -193,7 +196,7 @@ typedef union YYSTYPE
 
 
 /* Line 214 of yacc.c  */
-#line 197 "Syn.tab.c"
+#line 200 "Syn.tab.c"
 } YYSTYPE;
 # define YYSTYPE_IS_TRIVIAL 1
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
@@ -205,7 +208,7 @@ typedef union YYSTYPE
 
 
 /* Line 264 of yacc.c  */
-#line 209 "Syn.tab.c"
+#line 212 "Syn.tab.c"
 
 #ifdef short
 # undef short
@@ -527,14 +530,14 @@ static const yytype_int8 yyrhs[] =
 /* YYRLINE[YYN] -- source line where rule number YYN was defined.  */
 static const yytype_uint16 yyrline[] =
 {
-       0,    90,    90,   106,   107,   111,   112,   116,   117,   118,
-     123,   127,   137,   151,   171,   183,   188,   196,   197,   201,
-     203,   205,   207,   209,   211,   216,   217,   221,   222,   223,
-     224,   225,   226,   227,   233,   239,   273,   315,   313,   325,
-     324,   352,   369,   371,   368,   398,   397,   441,   456,   461,
-     462,   466,   467,   481,   485,   493,   495,   497,   499,   501,
-     503,   505,   507,   509,   511,   517,   519,   521,   523,   539,
-     541,   543,   545,   554,   564,   569
+       0,    93,    93,   117,   118,   122,   123,   127,   128,   129,
+     134,   138,   148,   162,   182,   194,   199,   207,   208,   212,
+     214,   216,   218,   220,   222,   227,   228,   232,   233,   234,
+     235,   236,   237,   238,   244,   250,   284,   326,   324,   336,
+     335,   363,   380,   388,   379,   421,   420,   464,   479,   484,
+     485,   489,   490,   504,   508,   516,   518,   520,   522,   524,
+     526,   528,   530,   532,   534,   540,   542,   544,   546,   562,
+     564,   566,   568,   577,   587,   592
 };
 #endif
 
@@ -1572,12 +1575,20 @@ yyreduce:
         case 2:
 
 /* Line 1455 of yacc.c  */
-#line 96 "Syn.y"
+#line 99 "Syn.y"
     {
             if (semantic_errors == 0)
                 printf("\nAnalyse syntaxique et semantique correcte.\n");
             else
                 printf(RED "\n%d erreur(s) semantique(s) detectee(s) - analyse terminee avec erreurs." RESET "\n", semantic_errors);
+
+            ts_afficher();
+            printf("\n=== Code intermediaire AVANT optimisation ===\n");
+            afficher_qdr();
+            optimiser_quadruplets();
+            printf("\n=== Code intermediaire APRES optimisation ===\n");
+            afficher_qdr();
+
             YYACCEPT;
         ;}
     break;
@@ -1585,14 +1596,14 @@ yyreduce:
   case 9:
 
 /* Line 1455 of yacc.c  */
-#line 119 "Syn.y"
+#line 130 "Syn.y"
     { yyerrok; ;}
     break;
 
   case 11:
 
 /* Line 1455 of yacc.c  */
-#line 128 "Syn.y"
+#line 139 "Syn.y"
     {
             int ok = 1;
             for (int i = 0; i < pending_count; i++) {
@@ -1607,7 +1618,7 @@ yyreduce:
   case 12:
 
 /* Line 1455 of yacc.c  */
-#line 138 "Syn.y"
+#line 149 "Syn.y"
     {
             /* $3 = valeur string */
             int ok = 1;
@@ -1626,7 +1637,7 @@ yyreduce:
   case 13:
 
 /* Line 1455 of yacc.c  */
-#line 152 "Syn.y"
+#line 163 "Syn.y"
     {
             /* $4 = taille (NUM_INT) */
             if (pending_count != 1) {
@@ -1648,7 +1659,7 @@ yyreduce:
   case 14:
 
 /* Line 1455 of yacc.c  */
-#line 172 "Syn.y"
+#line 183 "Syn.y"
     {
             if (ts_inserer_constante((yyvsp[(2) - (7)].sval), type_courant)) {
                 ts_marquer_init((yyvsp[(2) - (7)].sval));
@@ -1662,7 +1673,7 @@ yyreduce:
   case 15:
 
 /* Line 1455 of yacc.c  */
-#line 184 "Syn.y"
+#line 195 "Syn.y"
     {
             if (pending_count < MAX_PENDING_IDF)
                 pending_idfs[pending_count++] = strdup((yyvsp[(1) - (1)].sval));
@@ -1672,7 +1683,7 @@ yyreduce:
   case 16:
 
 /* Line 1455 of yacc.c  */
-#line 189 "Syn.y"
+#line 200 "Syn.y"
     {
             if (pending_count < MAX_PENDING_IDF)
                 pending_idfs[pending_count++] = strdup((yyvsp[(1) - (3)].sval));
@@ -1682,70 +1693,70 @@ yyreduce:
   case 17:
 
 /* Line 1455 of yacc.c  */
-#line 196 "Syn.y"
+#line 207 "Syn.y"
     { type_courant = TYPE_INTEGER; ;}
     break;
 
   case 18:
 
 /* Line 1455 of yacc.c  */
-#line 197 "Syn.y"
+#line 208 "Syn.y"
     { type_courant = TYPE_FLOAT;   ;}
     break;
 
   case 19:
 
 /* Line 1455 of yacc.c  */
-#line 202 "Syn.y"
+#line 213 "Syn.y"
     { (yyval.sval) = (char*)malloc(20); sprintf((yyval.sval), "%d", (yyvsp[(1) - (1)].ival)); ;}
     break;
 
   case 20:
 
 /* Line 1455 of yacc.c  */
-#line 204 "Syn.y"
+#line 215 "Syn.y"
     { (yyval.sval) = (char*)malloc(20); sprintf((yyval.sval), "%f", (yyvsp[(1) - (1)].fval)); ;}
     break;
 
   case 21:
 
 /* Line 1455 of yacc.c  */
-#line 206 "Syn.y"
+#line 217 "Syn.y"
     { (yyval.sval) = (char*)malloc(20); sprintf((yyval.sval), "%d", (yyvsp[(3) - (4)].ival)); ;}
     break;
 
   case 22:
 
 /* Line 1455 of yacc.c  */
-#line 208 "Syn.y"
+#line 219 "Syn.y"
     { (yyval.sval) = (char*)malloc(20); sprintf((yyval.sval), "%d", -(yyvsp[(3) - (4)].ival)); ;}
     break;
 
   case 23:
 
 /* Line 1455 of yacc.c  */
-#line 210 "Syn.y"
+#line 221 "Syn.y"
     { (yyval.sval) = (char*)malloc(20); sprintf((yyval.sval), "%f", (yyvsp[(3) - (4)].fval)); ;}
     break;
 
   case 24:
 
 /* Line 1455 of yacc.c  */
-#line 212 "Syn.y"
+#line 223 "Syn.y"
     { (yyval.sval) = (char*)malloc(20); sprintf((yyval.sval), "%f", -(yyvsp[(3) - (4)].fval)); ;}
     break;
 
   case 33:
 
 /* Line 1455 of yacc.c  */
-#line 228 "Syn.y"
+#line 239 "Syn.y"
     { yyerrok; ;}
     break;
 
   case 34:
 
 /* Line 1455 of yacc.c  */
-#line 233 "Syn.y"
+#line 244 "Syn.y"
     {
             (yyval.ival) = semantic_errors;
         ;}
@@ -1754,7 +1765,7 @@ yyreduce:
   case 35:
 
 /* Line 1455 of yacc.c  */
-#line 240 "Syn.y"
+#line 251 "Syn.y"
     {
         int expr_has_error = (semantic_errors > (yyvsp[(3) - (5)].ival));
 
@@ -1793,7 +1804,7 @@ yyreduce:
   case 36:
 
 /* Line 1455 of yacc.c  */
-#line 274 "Syn.y"
+#line 285 "Syn.y"
     {
         int expr_has_error = (semantic_errors > (yyvsp[(3) - (8)].ival));
 
@@ -1835,7 +1846,7 @@ yyreduce:
   case 37:
 
 /* Line 1455 of yacc.c  */
-#line 315 "Syn.y"
+#line 326 "Syn.y"
     {
             /* BZ: si condition fausse, sauter */
             quadr("BZ", (yyvsp[(3) - (7)].sval), "", "");
@@ -1845,7 +1856,7 @@ yyreduce:
   case 39:
 
 /* Line 1455 of yacc.c  */
-#line 325 "Syn.y"
+#line 336 "Syn.y"
     {
             /* BR: sauter le bloc else */
             quadr("BR", "", "", "");
@@ -1864,7 +1875,7 @@ yyreduce:
   case 40:
 
 /* Line 1455 of yacc.c  */
-#line 340 "Syn.y"
+#line 351 "Syn.y"
     {
             /* Patcher le BR vers apres le else */
             char idx_str[20];
@@ -1882,7 +1893,7 @@ yyreduce:
   case 41:
 
 /* Line 1455 of yacc.c  */
-#line 353 "Syn.y"
+#line 364 "Syn.y"
     {
             /* Patcher le BZ vers apres le then cas if sans lese */
             char idx_str[20];
@@ -1900,39 +1911,51 @@ yyreduce:
   case 42:
 
 /* Line 1455 of yacc.c  */
-#line 369 "Syn.y"
-    { debut_condition = qc; ;}
+#line 380 "Syn.y"
+    {
+            if (while_top < MAX_WHILE_NEST - 1) {
+                while_top++;
+                while_start_stack[while_top] = qc;
+                while_bz_stack[while_top] = -1;
+            }
+      ;}
     break;
 
   case 43:
 
 /* Line 1455 of yacc.c  */
-#line 371 "Syn.y"
-    { /* si condition fausse, sauter hors de la boucle */
+#line 388 "Syn.y"
+    {
+            /* si condition fausse, sauter hors de la boucle */
             quadr("BZ", (yyvsp[(5) - (6)].sval), "", "");
+
+            if (while_top >= 0) {
+                while_bz_stack[while_top] = qc - 1;
+            }
         ;}
     break;
 
   case 44:
 
 /* Line 1455 of yacc.c  */
-#line 376 "Syn.y"
+#line 398 "Syn.y"
     {
-            /* Generer BR qui retourne au debut de la condition */
-            char debut_str[20];
-            sprintf(debut_str, "%d", debut_condition);
-            quadr("BR", "", "", debut_str);
-            /* Mettre a jour le BZ pour pointer apres la boucle */
-            char fin_str[20];
-            sprintf(fin_str, "%d", qc);
-            int bz_idx = -1;
-            for (int i = qc - 2; i >= 0; i--) { /* qc-1 est le BR qu'on vient de generer */
-                if (strcmp(quad[i].oper, "BZ") == 0 && strlen(quad[i].res) == 0) {
-                    bz_idx = i;
-                    break;
+            if (while_top >= 0) {
+                /* BR vers le debut de condition de CE while (meme en imbrication) */
+                char debut_str[20];
+                sprintf(debut_str, "%d", while_start_stack[while_top]);
+                quadr("BR", "", "", debut_str);
+
+                /* Patcher le BZ de CE while vers l'instruction suivant endloop */
+                char fin_str[20];
+                sprintf(fin_str, "%d", qc);
+                if (while_bz_stack[while_top] >= 0) {
+                    updateQuad(while_bz_stack[while_top], 3, fin_str);
                 }
+
+                while_top--;
             }
-            if (bz_idx >= 0) updateQuad(bz_idx, 3, fin_str);
+
             printf("Boucle while correcte.\n");
         ;}
     break;
@@ -1940,7 +1963,7 @@ yyreduce:
   case 45:
 
 /* Line 1455 of yacc.c  */
-#line 398 "Syn.y"
+#line 421 "Syn.y"
     {
             if (!ts_est_declare((yyvsp[(2) - (6)].sval))) {
                 printf(RED "ERREUR semantique: variable '%s' non declaree, ligne %d, col %d" RESET "\n",
@@ -1960,7 +1983,7 @@ yyreduce:
   case 46:
 
 /* Line 1455 of yacc.c  */
-#line 414 "Syn.y"
+#line 437 "Syn.y"
     {
             /* Incrementer i <- i + 1 */
             char *tmp = strdup(nouveau_temp());
@@ -1990,7 +2013,7 @@ yyreduce:
   case 47:
 
 /* Line 1455 of yacc.c  */
-#line 442 "Syn.y"
+#line 465 "Syn.y"
     {
             if (!ts_est_declare((yyvsp[(3) - (5)].sval))) {
                 printf(RED "ERREUR semantique: variable '%s' non declaree, ligne %d, col %d" RESET "\n",
@@ -2007,21 +2030,21 @@ yyreduce:
   case 48:
 
 /* Line 1455 of yacc.c  */
-#line 457 "Syn.y"
+#line 480 "Syn.y"
     { printf("Instruction out correcte.\n"); ;}
     break;
 
   case 51:
 
 /* Line 1455 of yacc.c  */
-#line 466 "Syn.y"
+#line 489 "Syn.y"
     { quadr("out", (yyvsp[(1) - (1)].sval), "", ""); ;}
     break;
 
   case 52:
 
 /* Line 1455 of yacc.c  */
-#line 467 "Syn.y"
+#line 490 "Syn.y"
     {
     if (!ts_est_declare((yyvsp[(1) - (1)].sval))) {
         printf(RED "ERREUR semantique: variable '%s' non declaree, "
@@ -2041,7 +2064,7 @@ yyreduce:
   case 53:
 
 /* Line 1455 of yacc.c  */
-#line 481 "Syn.y"
+#line 504 "Syn.y"
     {
                     char s[20]; sprintf(s, "%d", (yyvsp[(1) - (1)].ival));
                     quadr("out", s, "", "");
@@ -2051,7 +2074,7 @@ yyreduce:
   case 54:
 
 /* Line 1455 of yacc.c  */
-#line 485 "Syn.y"
+#line 508 "Syn.y"
     {
                     char s[20]; sprintf(s, "%f", (yyvsp[(1) - (1)].fval));
                     quadr("out", s, "", "");
@@ -2061,98 +2084,98 @@ yyreduce:
   case 55:
 
 /* Line 1455 of yacc.c  */
-#line 494 "Syn.y"
+#line 517 "Syn.y"
     { (yyval.sval) = strdup(nouveau_temp()); quadr("==", (yyvsp[(1) - (3)].sval), (yyvsp[(3) - (3)].sval), (yyval.sval)); ;}
     break;
 
   case 56:
 
 /* Line 1455 of yacc.c  */
-#line 496 "Syn.y"
+#line 519 "Syn.y"
     { (yyval.sval) = strdup(nouveau_temp()); quadr("!=", (yyvsp[(1) - (3)].sval), (yyvsp[(3) - (3)].sval), (yyval.sval)); ;}
     break;
 
   case 57:
 
 /* Line 1455 of yacc.c  */
-#line 498 "Syn.y"
+#line 521 "Syn.y"
     { (yyval.sval) = strdup(nouveau_temp()); quadr("<",  (yyvsp[(1) - (3)].sval), (yyvsp[(3) - (3)].sval), (yyval.sval)); ;}
     break;
 
   case 58:
 
 /* Line 1455 of yacc.c  */
-#line 500 "Syn.y"
+#line 523 "Syn.y"
     { (yyval.sval) = strdup(nouveau_temp()); quadr(">",  (yyvsp[(1) - (3)].sval), (yyvsp[(3) - (3)].sval), (yyval.sval)); ;}
     break;
 
   case 59:
 
 /* Line 1455 of yacc.c  */
-#line 502 "Syn.y"
+#line 525 "Syn.y"
     { (yyval.sval) = strdup(nouveau_temp()); quadr("<=", (yyvsp[(1) - (3)].sval), (yyvsp[(3) - (3)].sval), (yyval.sval)); ;}
     break;
 
   case 60:
 
 /* Line 1455 of yacc.c  */
-#line 504 "Syn.y"
+#line 527 "Syn.y"
     { (yyval.sval) = strdup(nouveau_temp()); quadr(">=", (yyvsp[(1) - (3)].sval), (yyvsp[(3) - (3)].sval), (yyval.sval)); ;}
     break;
 
   case 61:
 
 /* Line 1455 of yacc.c  */
-#line 506 "Syn.y"
+#line 529 "Syn.y"
     { (yyval.sval) = strdup(nouveau_temp()); quadr("AND", (yyvsp[(1) - (3)].sval), (yyvsp[(3) - (3)].sval), (yyval.sval)); ;}
     break;
 
   case 62:
 
 /* Line 1455 of yacc.c  */
-#line 508 "Syn.y"
+#line 531 "Syn.y"
     { (yyval.sval) = strdup(nouveau_temp()); quadr("OR",  (yyvsp[(1) - (3)].sval), (yyvsp[(3) - (3)].sval), (yyval.sval)); ;}
     break;
 
   case 63:
 
 /* Line 1455 of yacc.c  */
-#line 510 "Syn.y"
+#line 533 "Syn.y"
     { (yyval.sval) = strdup(nouveau_temp()); quadr("NON", (yyvsp[(3) - (4)].sval), "",  (yyval.sval)); ;}
     break;
 
   case 64:
 
 /* Line 1455 of yacc.c  */
-#line 512 "Syn.y"
+#line 535 "Syn.y"
     { (yyval.sval) = (yyvsp[(2) - (3)].sval); ;}
     break;
 
   case 65:
 
 /* Line 1455 of yacc.c  */
-#line 518 "Syn.y"
+#line 541 "Syn.y"
     { (yyval.sval) = strdup(nouveau_temp()); quadr("+", (yyvsp[(1) - (3)].sval), (yyvsp[(3) - (3)].sval), (yyval.sval)); ;}
     break;
 
   case 66:
 
 /* Line 1455 of yacc.c  */
-#line 520 "Syn.y"
+#line 543 "Syn.y"
     { (yyval.sval) = strdup(nouveau_temp()); quadr("-", (yyvsp[(1) - (3)].sval), (yyvsp[(3) - (3)].sval), (yyval.sval)); ;}
     break;
 
   case 67:
 
 /* Line 1455 of yacc.c  */
-#line 522 "Syn.y"
+#line 545 "Syn.y"
     { (yyval.sval) = strdup(nouveau_temp()); quadr("*", (yyvsp[(1) - (3)].sval), (yyvsp[(3) - (3)].sval), (yyval.sval)); ;}
     break;
 
   case 68:
 
 /* Line 1455 of yacc.c  */
-#line 524 "Syn.y"
+#line 547 "Syn.y"
     {
             /* Verification division par zero: litteral ou constante de valeur 0 */
             int div_zero = (strcmp((yyvsp[(3) - (3)].sval), "0") == 0 || strcmp((yyvsp[(3) - (3)].sval), "0.0") == 0);
@@ -2173,28 +2196,28 @@ yyreduce:
   case 69:
 
 /* Line 1455 of yacc.c  */
-#line 540 "Syn.y"
+#line 563 "Syn.y"
     { (yyval.sval) = (yyvsp[(2) - (3)].sval); ;}
     break;
 
   case 70:
 
 /* Line 1455 of yacc.c  */
-#line 542 "Syn.y"
+#line 565 "Syn.y"
     { (yyval.sval) = (yyvsp[(3) - (4)].sval); ;}
     break;
 
   case 71:
 
 /* Line 1455 of yacc.c  */
-#line 544 "Syn.y"
+#line 567 "Syn.y"
     { (yyval.sval) = strdup(nouveau_temp()); quadr("NEG", (yyvsp[(3) - (4)].sval), "", (yyval.sval)); ;}
     break;
 
   case 72:
 
 /* Line 1455 of yacc.c  */
-#line 546 "Syn.y"
+#line 569 "Syn.y"
     {
             if (!ts_est_declare((yyvsp[(1) - (1)].sval))) {
                 printf(RED "ERREUR semantique: variable '%s' non declaree, ligne %d, col %d" RESET "\n",
@@ -2208,7 +2231,7 @@ yyreduce:
   case 73:
 
 /* Line 1455 of yacc.c  */
-#line 555 "Syn.y"
+#line 578 "Syn.y"
     {
             if (!ts_est_declare((yyvsp[(1) - (4)].sval))) {
                 printf(RED "ERREUR semantique: tableau '%s' non declare, ligne %d, col %d" RESET "\n",
@@ -2223,7 +2246,7 @@ yyreduce:
   case 74:
 
 /* Line 1455 of yacc.c  */
-#line 565 "Syn.y"
+#line 588 "Syn.y"
     {
             (yyval.sval) = (char*)malloc(20);
             sprintf((yyval.sval), "%d", (yyvsp[(1) - (1)].ival));
@@ -2233,7 +2256,7 @@ yyreduce:
   case 75:
 
 /* Line 1455 of yacc.c  */
-#line 570 "Syn.y"
+#line 593 "Syn.y"
     {
             (yyval.sval) = (char*)malloc(20);
             sprintf((yyval.sval), "%f", (yyvsp[(1) - (1)].fval));
@@ -2243,7 +2266,7 @@ yyreduce:
 
 
 /* Line 1455 of yacc.c  */
-#line 2247 "Syn.tab.c"
+#line 2270 "Syn.tab.c"
       default: break;
     }
   YY_SYMBOL_PRINT ("-> $$ =", yyr1[yyn], &yyval, &yyloc);
@@ -2455,7 +2478,7 @@ yyreturn:
 
 
 /* Line 1675 of yacc.c  */
-#line 576 "Syn.y"
+#line 599 "Syn.y"
 
 
 int main()

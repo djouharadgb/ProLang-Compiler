@@ -21,8 +21,11 @@ TypeVar type_courant; /* Type courant des variables when we have multiple declar
 static char *pending_idfs[MAX_PENDING_IDF]; /*cas de plusierus declaration, bison ne connait pas le type encore*/
 static int pending_count = 0;
 
-/* Pour sauvegarder le debut de l'evaluation de la condition de boucle */
-static int debut_condition = 0;
+/* Contexte des boucles while imbriquees (debut condition + index BZ a patcher) */
+#define MAX_WHILE_NEST 100
+static int while_start_stack[MAX_WHILE_NEST]; /*index deb while*/
+static int while_bz_stack[MAX_WHILE_NEST]; /*index BZ a patcher: fin while*/
+static int while_top = -1;
 %}
 
 %union {
@@ -98,6 +101,14 @@ programme
                 printf("\nAnalyse syntaxique et semantique correcte.\n");
             else
                 printf(RED "\n%d erreur(s) semantique(s) detectee(s) - analyse terminee avec erreurs." RESET "\n", semantic_errors);
+
+            ts_afficher();
+            printf("\n=== Code intermediaire AVANT optimisation ===\n");
+            afficher_qdr();
+            optimiser_quadruplets();
+            printf("\n=== Code intermediaire APRES optimisation ===\n");
+            afficher_qdr();
+
             YYACCEPT;
         }
     ;
@@ -366,29 +377,41 @@ suite_if
 
 instruction_loop_while
     : LOOP_MC WHILE_MC SEP_LPAREN
-      { debut_condition = qc; } /* Sauvegarder le debut de l'evaluation de la condition */
+      {
+            if (while_top < MAX_WHILE_NEST - 1) {
+                while_top++;
+                while_start_stack[while_top] = qc;
+                while_bz_stack[while_top] = -1;
+            }
+      }
       condition SEP_RPAREN
-        { /* si condition fausse, sauter hors de la boucle */
+        {
+            /* si condition fausse, sauter hors de la boucle */
             quadr("BZ", $5, "", "");
+
+            if (while_top >= 0) {
+                while_bz_stack[while_top] = qc - 1;
+            }
         }
       SEP_LBRACE liste_instructions SEP_RBRACE
       ENDLOOP_MC SEP_SEMICOLON
         {
-            /* Generer BR qui retourne au debut de la condition */
-            char debut_str[20];
-            sprintf(debut_str, "%d", debut_condition);
-            quadr("BR", "", "", debut_str);
-            /* Mettre a jour le BZ pour pointer apres la boucle */
-            char fin_str[20];
-            sprintf(fin_str, "%d", qc);
-            int bz_idx = -1;
-            for (int i = qc - 2; i >= 0; i--) { /* qc-1 est le BR qu'on vient de generer */
-                if (strcmp(quad[i].oper, "BZ") == 0 && strlen(quad[i].res) == 0) {
-                    bz_idx = i;
-                    break;
+            if (while_top >= 0) {
+                /* BR vers le debut de condition de CE while (meme en imbrication) */
+                char debut_str[20];
+                sprintf(debut_str, "%d", while_start_stack[while_top]);
+                quadr("BR", "", "", debut_str);
+
+                /* Patcher le BZ de CE while vers l'instruction suivant endloop */
+                char fin_str[20];
+                sprintf(fin_str, "%d", qc);
+                if (while_bz_stack[while_top] >= 0) {
+                    updateQuad(while_bz_stack[while_top], 3, fin_str);
                 }
+
+                while_top--;
             }
-            if (bz_idx >= 0) updateQuad(bz_idx, 3, fin_str);
+
             printf("Boucle while correcte.\n");
         }
     ;
