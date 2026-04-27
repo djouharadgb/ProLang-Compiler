@@ -10,12 +10,13 @@
     #define RESET "\033[0m"
 %}
 
-letter      [A-Za-z] /* */
+letter      [A-Za-z]
 digit       [0-9]
 int_num     (0|[1-9][0-9]*)
 float_num   (0|[1-9][0-9]*)"."[0-9]+
+float_bad     (0|[1-9][0-9]*)"."
 strings     \"[^\"]*\"
-IDF         {letter}([a-z0-9]|"_"[a-z0-9])*
+IDF         {letter}[a-z0-9_]*
 espace      [ \t]+
 saut_ligne  \n
 
@@ -23,10 +24,10 @@ saut_ligne  \n
 
 %%
 
-"//*"                  { BEGIN(COMMENT); } /*we use states . when we meet //, we enter state comment*/
-<COMMENT>"*//"         { BEGIN(INITIAL); } /*quand il rencontre *// , il rentre dans l'etat initial*/
-<COMMENT>{saut_ligne}  { nb_ligne++; nb_col = 1; } /*quand il rencontre saut de ligne , il fait*/
-<COMMENT>.             { /* ignorer le contenu du commentaire */ }/*quand il rencontre du nimporte quoi il l'ignore*/
+"//*"                  { BEGIN(COMMENT); } /* entrer dans l'etat COMMENT */
+<COMMENT>"*//"         { BEGIN(INITIAL); } /* sortir de l'etat COMMENT */
+<COMMENT>{saut_ligne}  { nb_ligne++; nb_col = 1; }
+<COMMENT>.             { /* ignorer le contenu du commentaire */ }
 
 "%%"[^\n]*            { nb_col += yyleng; } /* commentaire mono-ligne */
 
@@ -55,17 +56,38 @@ saut_ligne  \n
 "OR"                { nb_col += yyleng; ts_inserer_mc("OR",           "OR");           return OR;           }
 "NON"               { nb_col += yyleng; ts_inserer_mc("NON",          "NON");          return NON;          }
 
+_[A-Za-z0-9_]*      {
+               nb_col += yyleng;
+               printf(RED "ERREUR lexicale: identificateur mal forme '%s' "
+                   "(ne doit pas commencer par '_'), ligne %d, col %d" RESET "\n",
+                   yytext, nb_ligne, nb_col - yyleng);
+              }
+
 {IDF}               {
                         nb_col += yyleng;
                         if (yyleng > 14) {
                             printf(RED "ERREUR lexicale: identificateur '%s' depasse 14 caracteres, ligne %d, col %d" RESET "\n",
                                    yytext, nb_ligne, nb_col - yyleng);
+                        } else if (yytext[yyleng - 1] == '_') {
+                            printf(RED "ERREUR lexicale: identificateur '%s' ne peut pas "
+                                   "se terminer par '_', ligne %d, col %d" RESET "\n",
+                                   yytext, nb_ligne, nb_col - yyleng);
+                        } else if (strstr(yytext, "__") != NULL) {
+                            printf(RED "ERREUR lexicale: identificateur '%s' contient des "
+                                   "tirets bas consecutifs '__', ligne %d, col %d" RESET "\n",
+                                   yytext, nb_ligne, nb_col - yyleng);
                         } else {
-                            yylval.sval = strdup(yytext);/*yylval on stocke la valeur de l'identificateur et son type,sans yylval, it cant know which idf, strdup pour ne pas ecraser la val*/
+                            yylval.sval = strdup(yytext); /* yylval stocke la valeur de l'identificateur */
                             return IDF;
                         }
                     }
-
+{float_bad}  {
+                nb_col += yyleng;
+                printf(RED "ERREUR lexicale: constante reelle mal formee '%s' "
+                       "(chiffre manquant apres '.'), ligne %d, col %d" RESET "\n",
+                       yytext, nb_ligne, nb_col - yyleng);
+             }
+             
 {float_num}         {
                         nb_col += yyleng;
                         yylval.fval = atof(yytext);

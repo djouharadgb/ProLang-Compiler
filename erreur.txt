@@ -1,0 +1,63 @@
+BeginProject test;
+
+Setup :
+
+    %% ============================================================
+    %% ERREURS SEMANTIQUES — Partie Declaration
+    %% ============================================================
+
+    define x : integer;
+    define x : integer;                     %% #5  SEMANTIQUE: double declaration de 'x'
+
+    define a | b : [ integer ; 5 ] ;        %% #6  SEMANTIQUE: tableau avec plusieurs noms
+    define tbad : [ integer ; 0 ] ;         %% #7/#8 SEMANTIQUE: taille de tableau invalide
+
+    define good : integer;
+    define tab : [ integer ; 5 ] ;
+    define moy : float;
+
+    const c : integer = 5;
+
+Run :
+{
+    %% ============================================================
+    %% ERREURS LEXICALES
+    %% ============================================================
+
+    identificateurvraimenttreslong <-- 1;   %% #1  LEXICALE: IDF depasse 14 caracteres
+
+    bad_ <-- 1;                             %% #1b LEXICALE: IDF se termine par '_'
+
+    bad__name <-- 1;                        %% #1c LEXICALE: IDF avec '__' consecutifs
+
+    @                                       %% #3  LEXICALE: caractere inconnu '@'
+
+    x <-- 40000;                            %% #2  LEXICALE: entier hors limites [-32768,32767]
+    moy <-- 4.;                            %% #2  LEXICALE: entier hors limites [-32768,32767]
+
+
+    %% ============================================================
+    %% ERREURS SEMANTIQUES — Partie Instructions
+    %% ============================================================
+
+    y <-- 3;                                %% #9  SEMANTIQUE: variable 'y' non declaree
+
+    c <-- 7;                                %% #10 SEMANTIQUE: modification de la constante 'c'
+
+    tab7[0] <-- 1;                           %% #11 SEMANTIQUE: tableau 'tab' non declare 
+
+    x <-- 10 / 0;                           %% #12 SEMANTIQUE: division par zero
+
+    good <-- moy;                           %% #14 SEMANTIQUE: incompatibilite de types integer <- float
+
+    x <-- good;                             %% #13 SEMANTIQUE: variable 'good' non initialisee
+
+    tab[10] <-- 1;                          %% #16 SEMANTIQUE: index hors limites (10 >= taille 5)
+
+    tab[(-1)] <-- 1;                        %% #15 SEMANTIQUE: index negatif (-1)
+
+    out("valeur de z: ", z) ;              %% #9  SEMANTIQUE: variable 'z' non declaree dans out
+
+}
+
+EndProject                                  %% #4  SYNTAXIQUE: EndProject sans ';'

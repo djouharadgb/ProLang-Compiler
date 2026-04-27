@@ -69,4 +69,12 @@ void ts_inserer_sep(const char *nom, const char *token);
 /* Affichage */
 void ts_afficher(void);
 
+/* Récupérer le type d'un symbole ("integer" ou "float") */
+const char *ts_get_type(const char *nom);
+
+/* Récupérer la taille d'un tableau (retourne -1 si pas un tableau) */
+int ts_get_taille(const char *nom);
+
+/* Vérifier si une variable a été initialisée */
+int ts_est_initialise(const char *nom);
 #endif 

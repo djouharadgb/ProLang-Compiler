@@ -8,7 +8,7 @@ int temp_count = 0;
 
 char *nouveau_temp(void) {
     static char temp[20];
-    sprintf(temp, "T%d", temp_count++);
+    sprintf(temp, "T%d", temp_count++); /*gere les ecriture de type T1 */
     return temp;
 }
 

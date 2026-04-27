@@ -18,7 +18,7 @@ TypeVar type_courant; /* Type courant des variables when we have multiple declar
 
 /* Pending IDF list — collecte les noms avant que le type soit connu */
 #define MAX_PENDING_IDF 100
-static char *pending_idfs[MAX_PENDING_IDF];
+static char *pending_idfs[MAX_PENDING_IDF]; /*cas de plusierus declaration, bison ne connait pas le type encore*/
 static int pending_count = 0;
 
 /* Pour sauvegarder le debut de l'evaluation de la condition de boucle */
@@ -27,9 +27,10 @@ static int debut_condition = 0;
 
 %union {
     int    ival;
-    float  fval;
+    float  fval; /*flex stocke la val dans yylval et bison la recupere de $*/
     char*  sval;
 }
+/*en vrai les $ on accede a yylval */
 
 %token <sval> IDF
 %token <sval> STRING
@@ -76,8 +77,9 @@ static int debut_condition = 0;
 %left OP_ADD OP_SUB
 %left OP_MUL OP_DIV
 
-%type <sval> expression condition
+%type <sval> expression condition /*type des non-terminals , cela retourne char : nom temp T1...*/
 %type <sval> valeur
+%type <ival> sem_checkpoint
 
 
 %start programme
@@ -96,12 +98,6 @@ programme
                 printf("\nAnalyse syntaxique et semantique correcte.\n");
             else
                 printf(RED "\n%d erreur(s) semantique(s) detectee(s) - analyse terminee avec erreurs." RESET "\n", semantic_errors);
-            ts_afficher();
-            printf("\n=== Code intermediaire AVANT optimisation ===\n");
-            afficher_qdr();
-            optimiser_quadruplets();
-            printf("\n=== Code intermediaire APRES optimisation ===\n");
-            afficher_qdr();
             YYACCEPT;
         }
     ;
@@ -119,11 +115,10 @@ liste_declarations
 declaration
     : decl_variable
     | decl_constante
+    | error SEP_SEMICOLON    /* récupération dans les déclarations */
+        { yyerrok; }
     ;
 
-/* decl_variable absorbs decl_tableau — factored to remove the LALR conflict:
-   DEFINE_MC IDF : could be tableau OR variable; need 2-token lookahead after ":".
-   Solution: share the prefix DEFINE_MC liste_idf SEP_COLON and branch inside suite_definition. */
 decl_variable
     : DEFINE_MC liste_idf SEP_COLON suite_definition
     ;
@@ -203,7 +198,7 @@ type
     ;
 
 valeur
-    : NUM_INT
+    : NUM_INT /*$$ resultat finale retournee par la regle*/
         { $$ = (char*)malloc(20); sprintf($$, "%d", $1); }
     | NUM_FLOAT
         { $$ = (char*)malloc(20); sprintf($$, "%f", $1); }
@@ -229,38 +224,89 @@ instruction
     | instruction_for
     | instruction_input
     | instruction_output
+    | error SEP_SEMICOLON  // ← récupération : sauter jusqu'au ";"
+        { yyerrok; } 
+    ;
+
+sem_checkpoint
+    : /* vide */
+        {
+            $$ = semantic_errors;
+        }
     ;
 
 instruction_affectation
-    : IDF OP_ASSIGN expression SEP_SEMICOLON
-        {
-            if (!ts_est_declare($1)) {
-                printf(RED "ERREUR semantique: variable '%s' non declaree, ligne %d, col %d" RESET "\n",
-                       $1, nb_ligne, nb_col);
-                semantic_errors++;
-            } else if (ts_est_constante($1)) {
-                printf(RED "ERREUR semantique: modification de la constante '%s', ligne %d, col %d" RESET "\n",
-                       $1, nb_ligne, nb_col);
+: IDF OP_ASSIGN sem_checkpoint expression SEP_SEMICOLON
+    {
+        int expr_has_error = (semantic_errors > $3);
+
+        if (!ts_est_declare($1)) {
+            printf(RED "ERREUR semantique: variable '%s' non declaree, "
+                   "ligne %d, col %d" RESET "\n", $1, nb_ligne, nb_col);
+            semantic_errors++;
+        } else if (ts_est_constante($1)) {
+            printf(RED "ERREUR semantique: modification de la constante '%s', "
+                   "ligne %d, col %d" RESET "\n", $1, nb_ligne, nb_col);
+            semantic_errors++;
+        } else if (expr_has_error) {
+            /* L'expression a deja leve une erreur semantique : ne pas valider l'affectation. */
+        } else {
+            /* Vérification compatibilité de types */
+            const char *type_dest = ts_get_type($1);  /* type de la variable */
+            const char *type_src  = ts_get_type($4);  /* type de l'expression */
+
+            /* Les deux sont connus ET différents → erreur */
+            if (type_dest != NULL && type_src != NULL
+                && strcmp(type_dest, type_src) != 0) {
+                printf(RED "ERREUR semantique: incompatibilite de types pour "
+                       "'%s' (%s) <-- expression (%s), ligne %d, col %d"
+                       RESET "\n",
+                       $1, type_dest, type_src, nb_ligne, nb_col);
                 semantic_errors++;
             } else {
-                quadr(":=", $3, "", $1);
+                quadr(":=", $4, "", $1);
                 ts_marquer_init($1);
                 printf("Affectation correcte.\n");
             }
         }
-    | IDF SEP_LBRACKET expression SEP_RBRACKET OP_ASSIGN expression SEP_SEMICOLON
-        {
-            if (!ts_est_declare($1)) {
-                printf(RED "ERREUR semantique: tableau '%s' non declare, ligne %d, col %d" RESET "\n",
-                       $1, nb_ligne, nb_col);
+    }
+    | IDF SEP_LBRACKET sem_checkpoint expression SEP_RBRACKET OP_ASSIGN expression SEP_SEMICOLON
+    {
+        int expr_has_error = (semantic_errors > $3);
+
+        if (!ts_est_declare($1)) {
+            printf(RED "ERREUR semantique: tableau '%s' non declare, "
+                   "ligne %d, col %d" RESET "\n", $1, nb_ligne, nb_col);
+            semantic_errors++;
+        } else if (expr_has_error) {
+            /* Index ou valeur d'affectation invalide(s) : ne pas confirmer l'affectation. */
+        } else {
+            int idx_val = atoi($4);          /* valeur de l'index si littéral */
+            int taille  = ts_get_taille($1); /* taille du tableau depuis la TS */
+
+            /* Index négatif détectable statiquement */
+            if (idx_val < 0) {
+                printf(RED "ERREUR semantique: index negatif (%d) pour le "
+                       "tableau '%s', ligne %d, col %d" RESET "\n",
+                       idx_val, $1, nb_ligne, nb_col);
                 semantic_errors++;
+
+            /* Index hors limites détectable statiquement */
+            } else if (taille > 0 && idx_val >= taille) {
+                printf(RED "ERREUR semantique: index (%d) hors limites pour "
+                       "le tableau '%s' (taille %d), ligne %d, col %d"
+                       RESET "\n",
+                       idx_val, $1, taille, nb_ligne, nb_col);
+                semantic_errors++;
+
             } else {
                 char dest[100];
-                sprintf(dest, "%s[%s]", $1, $3);
-                quadr(":=", $6, "", dest);
+                sprintf(dest, "%s[%s]", $1, $4);
+                quadr(":=", $7, "", dest);
                 printf("Affectation tableau correcte.\n");
             }
         }
+    }
     ;
 
 instruction_condition
@@ -274,7 +320,6 @@ instruction_condition
       suite_if
     ;
 
-/* suite_if lit 1 token de lookahead (ELSE_MC ou ENDIF_MC) => LALR(1) sans conflit */
 suite_if
     : ELSE_MC
         {
@@ -283,7 +328,7 @@ suite_if
             /* Patcher le BZ vers le debut du else */
             char idx_str[20];
             sprintf(idx_str, "%d", qc);
-            for (int i = qc - 2; i >= 0; i--) {
+            for (int i = qc - 2; i >= 0; i--) { /*br -1, else -2*/
                 if (strcmp(quad[i].oper, "BZ") == 0 && strlen(quad[i].res) == 0) {
                     updateQuad(i, 3, idx_str);
                     break;
@@ -306,7 +351,7 @@ suite_if
         }
     | ENDIF_MC SEP_SEMICOLON
         {
-            /* Patcher le BZ vers apres le then */
+            /* Patcher le BZ vers apres le then cas if sans lese */
             char idx_str[20];
             sprintf(idx_str, "%d", qc);
             for (int i = qc - 1; i >= 0; i--) {
@@ -419,14 +464,20 @@ liste_out
 
 element_out
     : STRING     { quadr("out", $1, "", ""); }
-    | IDF        {
-                    if (!ts_est_declare($1)) {
-                        printf(RED "ERREUR semantique: variable '%s' non declaree, ligne %d, col %d" RESET "\n",
-                               $1, nb_ligne, nb_col);
-                        semantic_errors++;
-                    }
-                    quadr("out", $1, "", "");
-                 }
+    | IDF {
+    if (!ts_est_declare($1)) {
+        printf(RED "ERREUR semantique: variable '%s' non declaree, "
+               "ligne %d, col %d" RESET "\n", $1, nb_ligne, nb_col);
+        semantic_errors++;
+    } else if (!ts_est_initialise($1)) {
+        printf(RED "ERREUR semantique: variable '%s' utilisee sans "
+               "initialisation, ligne %d, col %d" RESET "\n",
+               $1, nb_ligne, nb_col);
+        semantic_errors++;
+    } else {
+        quadr("out", $1, "", "");  /* ← quad seulement si tout est ok */
+    }
+}
     | NUM_INT    {
                     char s[20]; sprintf(s, "%d", $1);
                     quadr("out", s, "", "");

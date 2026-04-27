@@ -272,7 +272,28 @@ void ts_inserer_sep(const char *nom, const char *token) {
     strncpy(tabS[cpts].type, token, 19); tabS[cpts].type[19] = '\0';
     cpts++;
 }
+/* Retourner le type d'un symbole */
+const char *ts_get_type(const char *nom) {
+    NoeudTS *n = ts_find(nom);
+    if (n != NULL) return n->type; /* "integer" ou "float" */
+    return NULL;                   /* symbole introuvable  */
+}
 
+/* Retourner la taille d'un tableau*/
+int ts_get_taille(const char *nom) {
+    NoeudTS *n = ts_find(nom);
+    /* vérifier que c'est bien un tableau */
+    if (n != NULL && strcmp(n->code, "TABLEAU") == 0)
+        return atoi(n->val); /* convertir la taille en entier */
+    return -1; /* pas un tableau ou introuvable */
+}
+
+/* Vérifier si une variable a été initialisée*/
+int ts_est_initialise(const char *nom) {
+    NoeudTS *n = ts_find(nom);
+    if (n != NULL && n->val[0] != '\0') return 1; /* initialisée */
+    return 0; /* non initialisée */
+}
 /*AFFICHAGE DES TROIS TABLES*/
 void ts_afficher(void) {
 
@@ -305,21 +326,6 @@ void ts_afficher(void) {
 
     printf("+------+----+--------------------+----------+-----------+--------------------+\n");
     printf("Total: %d entree(s)  |  Taille de la table: %d seaux\n", cpt, HASH_SIZE);
-
-    /* ---- Afficher aussi les collisions (seaux avec > 1 entrée) ---- */
-    printf("\n--- Statistiques de hachage ---\n");
-    int seaux_utilises = 0;
-    int max_chaine     = 0;
-    for (int h = 0; h < HASH_SIZE; h++) {
-        int len = 0;
-        NoeudTS *c = hashTable[h];
-        while (c) { len++; c = c->suivant; }  /* longueur de la liste du seau h */
-        if (len > 0) seaux_utilises++;
-        if (len > max_chaine) max_chaine = len;
-    }
-    printf("Seaux utilises : %d / %d\n", seaux_utilises, HASH_SIZE);
-    printf("Longueur max d'une liste chainee : %d\n", max_chaine);
-
     /* ---- Table des mots-clés ---- */
     printf("\n/****** Table des mots-cles ******/\n");
     printf("+----+--------------------+--------------------+\n");

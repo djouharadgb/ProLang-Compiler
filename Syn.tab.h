@@ -102,7 +102,7 @@ typedef union YYSTYPE
 #line 28 "Syn.y"
 
     int    ival;
-    float  fval;
+    float  fval; /*flex stocke la val dans yylval et bison la recupere de $*/
     char*  sval;
 
 

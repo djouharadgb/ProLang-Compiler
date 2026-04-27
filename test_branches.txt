@@ -7,7 +7,7 @@ Setup :
 
 Run :
 {
-    res <- 0;
+    res <-- 0;
 
     %% Boucle externe : i de 0 a 2
     for i in 0 to 2
@@ -15,7 +15,7 @@ Run :
         %% Boucle interne : j de 0 a 3
         for j in 0 to 3
         {
-            res <- res + 1;
+            res <-- res + 1;
         }
         endfor;
     }
