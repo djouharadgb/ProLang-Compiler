@@ -600,7 +600,6 @@ void optimiser_quadruplets(void)
 
     printf(CYN "\n============================================================\n" RESET);
     printf(CYN " OPTIMISATION DU CODE INTERMEDIAIRE\n" RESET);
-    printf(CYN " USTHB - Faculte Informatique 2025-2026\n" RESET);
     printf(CYN "============================================================\n" RESET);
 
     do {
@@ -626,5 +625,4 @@ void optimiser_quadruplets(void)
     } while (modifie && iterations < 30);
 
     printf(GRN "[Optimisation terminee en %d iteration(s)]\n" RESET, iterations);
-    printf(CYN "============================================================\n" RESET);
 }

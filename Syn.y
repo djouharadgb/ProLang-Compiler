@@ -139,7 +139,7 @@ suite_definition
         {
             int ok = 1;
             for (int i = 0; i < pending_count; i++) {
-                if (!ts_inserer_variable(pending_idfs[i], type_courant)) ok = 0;
+                if (!ts_inserer_variable(pending_idfs[i], type_courant)) ok = 0; /*ok, si il ya erreur =0*/
                 free(pending_idfs[i]);
             }
             pending_count = 0;

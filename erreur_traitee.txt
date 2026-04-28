@@ -22,3 +22,25 @@
 18 [INTERNE : dépassement du nombre maximum de quadruplets]
 
 19 [BILAN : N erreur(s) sémantique(s) détectée(s) — analyse terminée avec erreurs]
+
+loop while (i < 3)          → PUSH : while_top = 0
+{                               while_start_stack[0] = 5  (début condition)
+                                while_bz_stack[0]    = 6  (BZ à patcher)
+
+    loop while (j < 3)      → PUSH : while_top = 1
+    {                           while_start_stack[1] = 10 (début condition)
+                                while_bz_stack[1]    = 11 (BZ à patcher)
+
+        res <-- res + 1;
+
+    }
+    endloop;                → POP  : while_top = 1
+                                patch BZ[11] → qc actuel
+                                BR → while_start_stack[1] = 10
+                                while_top = 0
+
+}
+endloop;                    → POP  : while_top = 0
+                                patch BZ[6] → qc actuel
+                                BR → while_start_stack[0] = 5
+                                while_top = -1
