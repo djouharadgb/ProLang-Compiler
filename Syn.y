@@ -7,6 +7,7 @@
 #include "ts.h"
 #include "quad.h"
 #include "opt.h"
+#include "asm8086.h"
 
 int  yylex(void);
 int  yyerror(char *msg);
@@ -108,6 +109,11 @@ programme
             optimiser_quadruplets();
             printf("\n=== Code intermediaire APRES optimisation ===\n");
             afficher_qdr();
+            if (semantic_errors == 0) {
+                generer_asm("sortie.asm");
+            } else {
+                printf("Generation assembleur ignoree (erreurs semantiques).\n");
+            }
 
             YYACCEPT;
         }
