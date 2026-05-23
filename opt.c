@@ -5,24 +5,16 @@
 #include <string.h>
 #include <ctype.h>
 
-/* =========================================================
-   COULEURS (coherence avec le reste du projet)
-   ========================================================= */
 #define GRN  "\033[1;32m"
 #define CYN  "\033[1;36m"
 #define YLW  "\033[1;33m"
 #define RESET "\033[0m"
 
-/* =========================================================
-   FONCTIONS UTILITAIRES
-   ========================================================= */
 
 /*
- * est_nombre : verifie si la chaine s represente un nombre valide
- *              (entier ou flottant, avec signe optionnel).
- * Utilise pour distinguer les constantes des noms de variables
- * avant d'appliquer les regles de simplification algebrique.
- * Ex: "42", "-3.14", "+5" => 1  |  "x", "+", "T0" => 0
+ est_nombre : verifie si la chaine s represente un nombre valide
+            (entier ou flottant, avec signe optionnel).
+            on verifie qu cest un nombre avant de simplifier x+0=x
  */
 static int est_nombre(const char *s)
 {
@@ -41,25 +33,19 @@ static int est_nombre(const char *s)
 }
 
 /*
- * est_temporaire : verifie si s est un temporaire genere par le compilateur.
- * Un temporaire a la forme T0, T1, T2, ... (T majuscule + chiffres).
- * Utilise pour restreindre certaines optimisations aux seuls temporaires
- * (on ne supprime pas les variables utilisateur meme si elles semblent mortes).
- */
+  est_temporaire : verifie si s est un temporaire genere par le compilateur.
+  Un temporaire a la forme T0, T1, T2, ... (T majuscule + chiffres) */
 static int est_temporaire(const char *s)
 {
     int i;
     if (!s || s[0] != 'T') return 0;
     for (i = 1; s[i]; i++)
-        if (!isdigit((unsigned char)s[i])) return 0;
+        if (!isdigit((unsigned char)s[i])) return 0; // mor first T pas de digit
     return (i > 1); /* au moins un chiffre apres le T */
 }
 
 /*
- * est_saut : verifie si l'operateur est un saut (BZ ou BR).
- * Les sauts sont des barrieres de flot de controle :
- * aucune optimisation ne peut propager des valeurs par-dessus un saut,
- * car on ne sait pas si ce chemin sera execute.
+est_saut : verifie si l'operateur est un saut (BZ ou BR).
  */
 static int est_saut(const char *op)
 {
@@ -68,9 +54,7 @@ static int est_saut(const char *op)
 
 /*
  * a_effet_de_bord : verifie si le quadruplet i produit un effet
- * observable depuis l'exterieur du programme (saut, lecture, affichage).
- * Ces quadruplets ne doivent JAMAIS etre supprimes par l'elimination
- * de code inutile, meme si leur resultat semble inutilise.
+ lecture, ecriture, saut) qui doit etre preserve meme si son resultat n'est jamais lu.
  */
 static int a_effet_de_bord(int i)
 {
@@ -81,10 +65,8 @@ static int a_effet_de_bord(int i)
 }
 
 /*
- * compter_utilisations : compte combien de fois la variable var
- * apparait comme operande (op1 ou op2) dans toute la table des quadruplets.
- * Utilise pour savoir si un temporaire est encore lu quelque part
- * avant de decider de le supprimer.
+ compter_utilisations : compte combien de fois la variable var
+ apparait comme operande (op1 ou op2) dans toute la table des quadruplets.
  */
 static int compter_utilisations(const char *var)
 {
@@ -98,17 +80,17 @@ static int compter_utilisations(const char *var)
 }
 
 /*
- * est_redefini_entre : verifie si la variable var est redefinie
- * (apparait comme resultat d'un quadruplet) dans l'intervalle [debut, fin[.
- * Les sauts sont ignores car ils ne definissent pas de variables.
- * Utilise pour s'assurer qu'une valeur n'a pas change entre
- * sa definition et son point d'utilisation.
+ est_redefini_entre : verifie si la variable var est redefinie
+0: t1 := x
+1: x  := 5
+2: t2 := t1 + 1
+here ida habina nbdlo t1 par x c'est faut
  */
 static int est_redefini_entre(const char *var, int debut, int fin)
 {
     int i;
     for (i = debut; i < fin; i++) {
-        if (est_saut(quad[i].oper)) continue;
+        if (est_saut(quad[i].oper)) continue; // we skip jumps, we dont assign there values
         if (strcmp(quad[i].res, var) == 0) return 1;
     }
     return 0;
@@ -124,24 +106,22 @@ static void formater_nombre(double v, char *buf)
     else              sprintf(buf, "%g",  v);
 }
 
-/* =========================================================
-   SIMPLIFICATION ALGEBRIQUE
-   (cours SAYOUD Lynda, diapo 105-106)
+/* SIMPLIFICATION ALGEBRIQUE
 
    Principe : remplacer des operations couteuses ou sans effet
    par des formes equivalentes plus simples ou par leur resultat
    calcule directement a la compilation.
 
    Regles appliquees sur chaque quadruplet :
-     X + 0  ou  0 + X   =>  X          (addition neutre)
-     X - 0              =>  X          (soustraction neutre)
-     X - X              =>  0          (variable moins elle-meme)
-     X * 0  ou  0 * X   =>  0          (multiplication absorbante)
-     X * 1  ou  1 * X   =>  X          (multiplication neutre)
-     X * 2  ou  2 * X   =>  X + X      (addition moins couteuse que multiplication)
-     X / 1              =>  X          (division neutre)
-     C1 op C2 (deux constantes) => resultat calcule a la compilation
-   ========================================================= */
+     X + 0  ou  0 + X   =>  X          
+     X - 0              =>  X        
+     X - X              =>  0       
+     X * 0  ou  0 * X   =>  0        
+     X * 1  ou  1 * X   =>  X        
+     X * 2  ou  2 * X   =>  X + X    
+     X / 1              =>  X         
+     C1 op C2 (deux constantes) => resultat calcule a la compilation*/
+
 static int simplification_algebrique(void)
 {
     int modifie = 0, i;
@@ -188,12 +168,13 @@ static int simplification_algebrique(void)
                 strcpy(op, ":="); strcpy(a, b); strcpy(b, "");
                 modifie = 1;
             } else if (b_est_nb && atof(b) == 2.0) {       /* X * 2 => X + X (addition moins couteuse) */
-                strcpy(op, "+"); strcpy(b, a);
+                strcpy(op, "+"); strcpy(b, a); // a+a
                 modifie = 1;
             } else if (a_est_nb && atof(a) == 2.0) {       /* 2 * X => X + X */
-                strcpy(op, "+"); strcpy(a, b);
+                strcpy(op, "+"); strcpy(a, b); //b+b
                 modifie = 1;
             } else if (a_est_nb && b_est_nb) {             /* C * C => resultat direct */
+                //res = 3 * 4 devient res := 12.
                 char buf[64]; formater_nombre(atof(a) * atof(b), buf);
                 strcpy(op, ":="); strcpy(a, buf); strcpy(b, "");
                 modifie = 1;
@@ -213,10 +194,7 @@ static int simplification_algebrique(void)
     return modifie;
 }
 
-/* =========================================================
-   SIMPLIFICATION DES CONSTANTES CHAINEES
-   (variante de simplification algebrique, cours SAYOUD diapo 109)
-
+/*SIMPLIFICATION DES CONSTANTES CHAINEES
    Principe : si deux quadruplets consecutifs effectuent chacun
    une addition ou soustraction avec une constante, et que le
    temporaire intermediaire n'est utilise qu'une seule fois,
@@ -228,10 +206,10 @@ static int simplification_algebrique(void)
    => quad[j] : R  = X  +/-  (C1 op C2)  (calcul net)
       quad[i] : NOP                       (supprime)
 
-   Exemple du cours (diapo 109) :
-     t10 = j + 1                (C1=1)
-     t11 = t10 - 1  (C2=1)  =>  t11 = j  (1-1=0, donc R = X)
-   ========================================================= */
+   Exemple :
+     t10 = j + 1              
+     t11 = t10 - 1  =>  t11 = j 
+  */
 static int simplification_constantes_chainees(void)
 {
     int modifie = 0, i;
@@ -251,9 +229,9 @@ static int simplification_constantes_chainees(void)
         int j, quad_usage = -1;
         for (j = i + 1; j < qc; j++) {
             if (est_saut(quad[j].oper)) break;               /* barriere : on arrete */
-            if (strcmp(quad[j].res, res1) == 0) break;       /* T redefini avant usage */
+            if (strcmp(quad[j].res, res1) == 0) break;       /* res1 est redéfini dans le quad j, alors l’ancienne valeur de res1 n’est plus valable  */
             if (strcmp(quad[j].op1, res1) == 0 || strcmp(quad[j].op2, res1) == 0) {
-                quad_usage = j; break;
+                quad_usage = j; break; //   on trouve le quad qui utilise res1, on arrete la recherche
             }
         }
         if (quad_usage == -1) continue;
@@ -271,10 +249,10 @@ static int simplification_constantes_chainees(void)
         double c1 = atof(b1), c2 = atof(b2), net;
         char op_net[4];
 
-        if      (strcmp(op1,"+")==0 && strcmp(op2,"+")==0) { net = c1+c2; strcpy(op_net, "+"); }
-        else if (strcmp(op1,"+")==0 && strcmp(op2,"-")==0) { net = c1-c2; strcpy(op_net,(net>=0)?"+":"-"); if(net<0)net=-net; }
-        else if (strcmp(op1,"-")==0 && strcmp(op2,"+")==0) { net = c2-c1; strcpy(op_net,(net>=0)?"+":"-"); if(net<0)net=-net; }
-        else /* - - */                                       { net = c1+c2; strcpy(op_net, "-"); }
+        if      (strcmp(op1,"+")==0 && strcmp(op2,"+")==0) { net = c1+c2; strcpy(op_net, "+"); } // T = X + 3 | R = T + 5    =>   R = X + 8
+        else if (strcmp(op1,"+")==0 && strcmp(op2,"-")==0) { net = c1-c2; strcpy(op_net,(net>=0)?"+":"-"); if(net<0)net=-net; } // T = X + 7 | R = T - 2    =>   R = X + 5
+        else if (strcmp(op1,"-")==0 && strcmp(op2,"+")==0) { net = c2-c1; strcpy(op_net,(net>=0)?"+":"-"); if(net<0)net=-net; }// T = X - 3 |R = T + 8    =>   R = X + 5   (net = 8-3 = +5)
+        else                                        { net = c1+c2; strcpy(op_net, "-"); }
 
         /* Mettre a jour le quadruplet d'usage avec le resultat fusionne */
         if (net == 0.0) {
@@ -298,9 +276,7 @@ static int simplification_constantes_chainees(void)
     return modifie;
 }
 
-/* =========================================================
-   PROPAGATION DE COPIE
-   (cours SAYOUD Lynda, diapo 100-101)
+/* PROPAGATION DE COPIE
 
    Principe : lorsqu'une variable dst est affectee a partir
    d'une variable src (dst := src), on remplace toutes les
@@ -312,20 +288,19 @@ static int simplification_constantes_chainees(void)
      - src est redefini (la copie n'est plus valide)
      - un saut est rencontre (barriere de flot de controle)
 
-   Exemple du cours (diapo 100) :
      t1 = t2           =>  dst=t1, src=t2
      t3 = 4 * t1       =>  t3 = 4 * t2   (t1 remplace par t2)
 
-   Cas impossible (diapo 101) :
+   Cas impossible  :
      t1 = t2
      t1 = t3           =>  t1 redefini : propagation arretee
      t4 = t1 + t5      =>  t1 vaut t3 ici, pas t2
-   ========================================================= */
+*/
 static int propagation_copie(void)
 {
     int modifie = 0, i;
     for (i = 0; i < qc; i++) {
-        if (strcmp(quad[i].oper, ":=") != 0) continue;
+        if (strcmp(quad[i].oper, ":=") != 0) continue; // on cherche les affectations simples
         const char *src = quad[i].op1;  /* valeur source */
         const char *dst = quad[i].res;  /* variable destination */
         if (!src || !*src || !dst || !*dst) continue;
@@ -345,9 +320,8 @@ static int propagation_copie(void)
     return modifie;
 }
 
-/* =========================================================
+/* 
    PROPAGATION D'EXPRESSION
-   (cours SAYOUD Lynda, diapo 102)
 
    Principe : si un temporaire T est defini par une affectation
    simple (T := src) et n'est utilise qu'une seule fois dans
@@ -358,13 +332,10 @@ static int propagation_copie(void)
    Condition : src ne doit pas avoir ete redefini entre la
    definition de T et son unique utilisation.
 
-   Remarque du cours : si T est utilise plusieurs fois,
-   on garde la variable pour ne pas recalculer l'expression.
-
-   Exemple (diapo 102) :
+   Exemple:
      t1 = expr         =>  T utilise une seule fois
      t3 = 4 * t1       =>  t3 = 4 * expr  (t1 supprime)
-   ========================================================= */
+    */
 static int propagation_expression(void)
 {
     int modifie = 0, i;
@@ -406,9 +377,7 @@ static int propagation_expression(void)
     return modifie;
 }
 
-/* =========================================================
-   ELIMINATION DES EXPRESSIONS REDONDANTES
-   (cours SAYOUD Lynda, diapo 103-104)
+/* ELIMINATION DES EXPRESSIONS REDONDANTES
 
    Principe : maintenir une table des expressions deja calculees.
    Si la meme expression apparait a nouveau et que ses operandes
@@ -420,14 +389,7 @@ static int propagation_expression(void)
      t2 = c * d
      t3 = a + b        =>  REDONDANT : remplace par t3 := t1
      t4 = t3 * e       =>  apres propagation : t4 = t1 * e
-
-   Invalidation : si un operande d'une expression memorisee
-   est redefini, cette expression est retiree de la table.
-   Un saut vide entierement la table (flot de controle incertain).
-
-   Commutativite : a+b et b+a sont considerees identiques pour
-   les operateurs + et *.
-   ========================================================= */
+*/
 #define MAX_EXPR_DISPO 256
 
 /* Structure representant une expression disponible dans la table */
@@ -524,9 +486,7 @@ static int elimination_expressions_redondantes(void)
     return modifie;
 }
 
-/* =========================================================
-   ELIMINATION DE CODE INUTILE
-   (cours SAYOUD Lynda, diapo 107-108)
+/* ELIMINATION DE CODE INUTILE
 
    Principe : supprimer les quadruplets dont le calcul n'a
    aucun impact sur le resultat final du programme.
@@ -535,15 +495,11 @@ static int elimination_expressions_redondantes(void)
      2. Les temporaires dont le resultat n'est jamais relu
         (count_uses == 0) : le calcul est inutile
 
-   Les quadruplets avec effets de bord (sauts BZ/BR, entrees
-   input, sorties out) sont toujours preserves.
-
    Exemple (diapo 107) :
      x   = t3       =>  x n'est jamais utilise apres
      a[t2] = t5     =>  conserve
      a[t4] = t3     =>  conserve
-   Apres : le quadruplet "x = t3" est supprime.
-   ========================================================= */
+   Apres : le quadruplet "x = t3" est supprime.*/
 static int elimination_code_inutile(void)
 {
     int modifie = 0, i;
@@ -575,13 +531,8 @@ static int elimination_code_inutile(void)
     return modifie;
 }
 
-/* =========================================================
+/*
    OPTIMISER_QUADRUPLETS : point d'entree de l'optimisation
-   (cours SAYOUD Lynda, diapo 113 - "Implementation")
-
-   Applique toutes les passes d'optimisation en boucle jusqu'a
-   convergence (point fixe) : quand une iteration complete ne
-   modifie plus aucun quadruplet, le code est optimal.
 
    Ordre des passes a chaque iteration :
      1. Simplification algebrique          (X*1=>X, X+0=>X, C*C=>resultat)
@@ -593,7 +544,7 @@ static int elimination_code_inutile(void)
 
    Chaque passe retourne 1 si elle a modifie au moins un quadruplet.
    La boucle recommence tant qu'au moins une passe a produit un changement.
-   ========================================================= */
+  */
 void optimiser_quadruplets(void)
 {
     int modifie, iterations = 0;
