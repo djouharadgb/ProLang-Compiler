@@ -1,26 +1,3 @@
-/*
- * asm8086.c  -  Generation de code assembleur 8086
- *
- * Cours USTHB 2025-2026, SAYOUD Lynda, diapositives 115-148.
- *
- * Traduit chaque quadruplet (oper, op1, op2, res) en une ou plusieurs
- * instructions assembleur 8086 et produit un fichier .asm complet
- * (pile, donnees, code) pret a etre assemble avec MASM/TASM.
- *
- * Operateurs traites :
- *   :=              affectation simple
- *   + - * /         arithmetique binaire
- *   NEG             negation unaire
- *   == != < > <= >= comparaison  (produit 0 ou 1 dans un temporaire)
- *   AND OR NON      logique booleenne
- *   BZ              saut conditionnel (si res == 0, sauter a l'adresse)
- *   BR              saut inconditionnel
- *   TAB             lecture tableau  (res = TAB[indice])
- *   :=TAB           ecriture tableau (TAB[indice] = val)  -- encodee comme ":="
- *   input           lecture clavier  (DOS INT 21h / appel simplifie)
- *   out             affichage ecran  (DOS INT 21h)
- */
-
 #include "asm8086.h"
 #include "quad.h"
 #include "ts.h"
@@ -29,17 +6,11 @@
 #include <string.h>
 #include <ctype.h>
 
-/* =========================================================
-   MACROS DE CONFORT
-   ========================================================= */
+/* Macro : ecrire une ligne dans le fichier asm */
 #define EMIT(fmt, ...)  fprintf(f, fmt "\n", ##__VA_ARGS__)
-#define EMITL(lbl, fmt, ...) fprintf(f, "%s: " fmt "\n", lbl, ##__VA_ARGS__)
 
-/* =========================================================
-   UTILITAIRES
-   ========================================================= */
 
-/* Verifie si s est un literral numerique (entier ou flottant) */
+/* Verifie si s est un nombre (ex: 42, -3, 1.5) */
 static int est_nombre(const char *s)
 {
     if (!s || !*s) return 0;
@@ -54,23 +25,12 @@ static int est_nombre(const char *s)
     return 1;
 }
 
-/* Verifie si la chaine contient un point (=> flottant) */
-static int est_flottant(const char *s)
-{
-    return s && strchr(s, '.') != NULL;
-}
-
-/*
- * nom_asm : convertit un nom de variable/temporaire en identifiant
- * valide pour l'assembleur 8086 (evite les conflits avec les mots-cles).
- * Les temporaires T0, T1, ... deviennent _T0, _T1, ...
- * Les tableaux de la forme "nom[idx]" sont geres separement.
- */
+/* Convertit un nom de variable en identifiant asm valide.
+   Les temporaires T0, T1... deviennent _T0, _T1... */
 static const char *nom_asm(const char *s)
 {
     static char buf[128];
     if (!s || !*s) return s;
-    /* Temporaires generes par le compilateur : prefixe _ pour securite */
     if (s[0] == 'T' && isdigit((unsigned char)s[1])) {
         snprintf(buf, sizeof(buf), "_T%s", s + 1);
         return buf;
@@ -78,11 +38,8 @@ static const char *nom_asm(const char *s)
     return s;
 }
 
-/*
- * est_tableau_access : detecte si la chaine a la forme "nom[indice]"
- * et extrait le nom du tableau et l'indice dans les buffers fournis.
- * Retourne 1 si oui, 0 sinon.
- */
+/* Detecte un acces tableau "nom[indice]" et extrait les deux parties.
+   Retourne 1 si c'est un acces tableau, 0 sinon. */
 static int est_tableau_access(const char *s, char *nom_tab, char *indice)
 {
     const char *lbr = strchr(s, '[');
@@ -95,31 +52,85 @@ static int est_tableau_access(const char *s, char *nom_tab, char *indice)
     return 1;
 }
 
+/* Emet un saut de ligne dans la sortie (separateur visuel) */
+static void emit_newline(FILE *f)
+{
+    EMIT("    MOV AH, 02h");
+    EMIT("    MOV DL, 0Ah");
+    EMIT("    INT 21h");
+}
+
 /* =========================================================
-   COLLECTE DES SYMBOLES DU SEGMENT DE DONNEES
+   CHARGEMENT ET STOCKAGE (AX / BX)
    ========================================================= */
 
 /*
- * On parcourt la table des symboles (TS) pour extraire toutes les
- * variables, constantes et tableaux a declarer dans DONNEE SEGMENT.
- * Les temporaires (T0, T1, ...) generes par le compilateur sont aussi
- * collectes depuis les quadruplets.
+ * charger_dans_reg : place la valeur de 'src' dans le registre 'reg' (AX ou BX).
+ *   - Nombre litteral   => MOV reg, valeur
+ *   - Acces tableau     => calcul index*2, puis MOV reg, tab[SI]
+ *   - Variable/temp     => MOV reg, nom
  */
+static void charger_dans_reg(FILE *f, const char *src, const char *reg)
+{
+    char ntab[64], idx[64];
+
+    if (est_nombre(src)) {
+        EMIT("    MOV %s, %ld", reg, (long)atof(src));
+
+    } else if (est_tableau_access(src, ntab, idx)) {
+        /* Calcul de l'offset : chaque element fait 2 octets (DW) */
+        if (est_nombre(idx))
+            EMIT("    MOV SI, %ld", atol(idx) * 2);
+        else {
+            EMIT("    MOV SI, %s", nom_asm(idx));
+            EMIT("    ADD SI, SI   ; SI = indice * 2");
+        }
+        EMIT("    MOV %s, %s[SI]", reg, nom_asm(ntab));
+
+    } else {
+        EMIT("    MOV %s, %s", reg, nom_asm(src));
+    }
+}
+
+/*
+ * stocker_ax_dans : stocke AX dans la destination 'dst'.
+ *   - Acces tableau => T[SI] = AX
+ *   - Variable/temp => MOV nom, AX
+ */
+static void stocker_ax_dans(FILE *f, const char *dst)
+{
+    char ntab[64], idx[64];
+
+    if (est_tableau_access(dst, ntab, idx)) {
+        if (est_nombre(idx))
+            EMIT("    MOV SI, %ld", atol(idx) * 2);
+        else {
+            EMIT("    MOV SI, %s", nom_asm(idx));
+            EMIT("    ADD SI, SI");
+        }
+        EMIT("    MOV %s[SI], AX", nom_asm(ntab));
+    } else {
+        EMIT("    MOV %s, AX", nom_asm(dst));
+    }
+}
+
+/* =========================================================
+   COLLECTE DES SYMBOLES (segment de donnees)
+   ========================================================= */
 
 #define MAX_SYMS 512
 
 typedef struct {
-    char  nom[128];
-    char  type[16];   /* "integer" ou "float" */
-    char  val[64];    /* valeur initiale ou "" */
-    int   taille;     /* 0 = scalaire, >0 = tableau */
-    int   est_temp;   /* 1 = temporaire compile */
+    char nom[128];
+    char type[16];  /* "integer" ou "float" */
+    char val[64];   /* valeur initiale ou "" */
+    int  taille;    /* 0 = scalaire, >0 = tableau */
+    int  est_temp;  /* 1 = temporaire compilateur  */
 } SymInfo;
 
 static SymInfo syms[MAX_SYMS];
 static int     nb_syms = 0;
 
-/* Verifie si le symbole est deja dans la liste */
 static int sym_existe(const char *nom)
 {
     int i;
@@ -128,7 +139,6 @@ static int sym_existe(const char *nom)
     return 0;
 }
 
-/* Ajoute un symbole */
 static void sym_ajouter(const char *nom, const char *type,
                         const char *val, int taille, int est_temp)
 {
@@ -141,77 +151,51 @@ static void sym_ajouter(const char *nom, const char *type,
     nb_syms++;
 }
 
-/*
- * Parcourt la table de hachage des symboles pour reconstruire la liste
- * de tout ce qui est a declarer dans le segment de donnees.
- */
+/* Parcourt la TS et les quadruplets pour collecter tous les symboles */
 static void collecter_symboles(void)
 {
     int i;
     nb_syms = 0;
 
-    /* --- Variables, constantes et tableaux depuis la TS --- */
+    /* Variables, constantes, tableaux depuis la table des symboles */
     for (i = 0; i < HASH_SIZE; i++) {
         NoeudTS *n = hashTable[i];
         while (n) {
             if (n->state == 1) {
-                int taille = 0;
-                if (strcmp(n->code, "TABLEAU") == 0)
-                    taille = atoi(n->val);
-                const char *val_init = "";
-                if (strcmp(n->code, "CONST") == 0 || strlen(n->val) > 0)
-                    val_init = n->val;
-                /* Pour les tableaux la val est la taille, pas une valeur init */
-                if (taille > 0) val_init = "";
+                int taille = (strcmp(n->code, "TABLEAU") == 0) ? atoi(n->val) : 0;
+                const char *val_init = (taille > 0) ? "" :
+                    ((strcmp(n->code,"CONST")==0 || strlen(n->val)>0) ? n->val : "");
                 sym_ajouter(n->name, n->type, val_init, taille, 0);
             }
             n = n->suivant;
         }
     }
 
-    /* --- Temporaires T0, T1, ... depuis les quadruplets --- */
+    /* Temporaires T0, T1, ... depuis les quadruplets */
     for (i = 0; i < qc; i++) {
-        const char *fields[4] = {
-            quad[i].op1, quad[i].op2, quad[i].res, NULL
-        };
+        const char *fields[3] = { quad[i].op1, quad[i].op2, quad[i].res };
         int f;
         for (f = 0; f < 3; f++) {
             const char *s = fields[f];
-            if (!s || !*s) continue;
-            if (est_nombre(s)) continue;
+            if (!s || !*s || est_nombre(s)) continue;
 
-            /* Temporaire direct */
-            if (s[0] == 'T' && isdigit((unsigned char)s[1]) && !strchr(s, '[')) {
-                if (!sym_existe(s))
-                    sym_ajouter(s, "integer", "", 0, 1);
-            }
+            /* Temporaire simple */
+            if (s[0]=='T' && isdigit((unsigned char)s[1]) && !strchr(s,'['))
+                sym_ajouter(s, "integer", "", 0, 1);
 
-            /* Acces tableau (nom[indice]) - on extrait le nom du tableau */
+            /* Indice de tableau qui serait un temporaire */
             char ntab[64], idx[64];
-            if (est_tableau_access(s, ntab, idx)) {
-                /* Le tableau est deja dans la TS, rien de plus a faire ici */
-                /* Mais si l'indice est un temporaire, l'ajouter */
-                if (idx[0] == 'T' && isdigit((unsigned char)idx[1]) && !sym_existe(idx))
+            if (est_tableau_access(s, ntab, idx))
+                if (idx[0]=='T' && isdigit((unsigned char)idx[1]))
                     sym_ajouter(idx, "integer", "", 0, 1);
-            }
         }
     }
 }
 
 /* =========================================================
-   EMISSION DU SEGMENT DE DONNEES
+   SEGMENT DE DONNEES
    ========================================================= */
 
-/*
- * Pour l'assembleur 8086 (diapo 137-141) :
- *   - entier scalaire  -> DW (2 octets, word)
- *   - flottant scalaire -> DD (4 octets, dword) ; note: en 8086 pur les
- *     flottants ne sont pas directement supportes par le FPU sans co-processeur
- *     8087, mais on les declare en DD et on les manipule via AX:DX.
- *     Dans ce projet on les traite comme des entiers 16-bit pour simplifier.
- *   - tableau d'entiers -> DW taille DUP (?)
- *   - temporaire        -> DW ? (non initialise)
- */
 static void emettre_segment_donnees(FILE *f)
 {
     int i;
@@ -220,162 +204,52 @@ static void emettre_segment_donnees(FILE *f)
 
     for (i = 0; i < nb_syms; i++) {
         SymInfo *s = &syms[i];
-        /* Nom de la variable dans l'assembleur */
         const char *anom = nom_asm(s->nom);
-        int is_float = (strcmp(s->type, "float") == 0);
 
-        if (s->taille > 0) {
-            /* Tableau : taille DUP(?) */
-            EMIT("    %-20s DW %d DUP(?)    ; tableau de %d entiers",
-                 anom, s->taille, s->taille);
-
-        } else if (s->est_temp) {
-            /* Temporaire : non initialise */
-            EMIT("    %-20s DW ?             ; temporaire compilateur", anom);
-
-        } else if (strlen(s->val) > 0
-                   && strcmp(s->val, "oui") != 0) { /* "oui" = juste marque init, pas de valeur */
-            /* Variable avec valeur d'initialisation concrete */
+        if (s->taille > 0)
+            EMIT("    %-20s DW %d DUP(?)  ; tableau", anom, s->taille);
+        else if (s->est_temp)
+            EMIT("    %-20s DW ?          ; temporaire", anom);
+        else if (strlen(s->val) > 0 && strcmp(s->val,"oui") != 0) {
             /* Variable/constante initialisee */
-            if (is_float) {
-                /* On stocke la partie entiere uniquement (simplification 8086) */
-                long v = (long)atof(s->val);
-                EMIT("    %-20s DW %ld           ; float (partie entiere)", anom, v);
-            } else {
-                EMIT("    %-20s DW %s", anom, s->val);
-            }
-        } else {
-            /* Variable non initialisee */
+            long v = (long)atof(s->val);
+            EMIT("    %-20s DW %ld", anom, v);
+        } else
             EMIT("    %-20s DW ?", anom);
-        }
     }
 
-    /* Chaine pour l'affichage OUT (DOS INT 21h attend '$' comme terminateur) */
-    EMIT("    _OUT_BUF             DB 10 DUP(?), '$' ; tampon affichage");
+    /* Tampon pour l'affichage (INT 21h attend '$' comme terminateur) */
+    EMIT("    _OUT_BUF             DB 10 DUP(?), '$'");
     EMIT("");
     EMIT("DONNEE ENDS");
     EMIT("");
 }
 
 /* =========================================================
-   GENERATION DE CODE : utilitaires de chargement
+   PROCEDURES UTILITAIRES (print / read)
    ========================================================= */
 
-/*
- * charger_dans_ax : emet les instructions pour placer la valeur de
- * l'operande 'src' dans le registre AX.
- *   - Si src est un nombre litteral : MOV AX, valeur
- *   - Si src est un acces tableau  : calcul index * 2, MOV AX, tab[SI]
- *   - Sinon (variable/temporaire)  : MOV AX, nom
- */
-static void charger_dans_ax(FILE *f, const char *src)
-{
-    char ntab[64], idx[64];
-
-    if (est_nombre(src)) {
-        /* Valeur immediate (diapo 125, adressage immediat) */
-        long v = (long)atof(src);
-        EMIT("    MOV AX, %ld", v);
-
-    } else if (est_tableau_access(src, ntab, idx)) {
-        /* Acces tableau T[i] : SI = i*2, AX = T[SI]  (diapo 141) */
-        if (est_nombre(idx)) {
-            long offset = atol(idx) * 2;
-            EMIT("    MOV SI, %ld", offset);
-        } else {
-            EMIT("    MOV SI, %s", nom_asm(idx));
-            EMIT("    ADD SI, SI         ; SI = indice * 2 (DW = 2 octets)");
-        }
-        EMIT("    MOV AX, %s[SI]", nom_asm(ntab));
-
-    } else {
-        /* Variable ou temporaire (diapo 125, registre <-> memoire) */
-        EMIT("    MOV AX, %s", nom_asm(src));
-    }
-}
-
-/*
- * charger_dans_bx : idem pour BX (utile pour le second operande
- * d'une operation binaire afin de ne pas ecraser AX).
- */
-static void charger_dans_bx(FILE *f, const char *src)
-{
-    char ntab[64], idx[64];
-
-    if (est_nombre(src)) {
-        long v = (long)atof(src);
-        EMIT("    MOV BX, %ld", v);
-    } else if (est_tableau_access(src, ntab, idx)) {
-        if (est_nombre(idx)) {
-            long offset = atol(idx) * 2;
-            EMIT("    MOV SI, %ld", offset);
-        } else {
-            EMIT("    MOV SI, %s", nom_asm(idx));
-            EMIT("    ADD SI, SI");
-        }
-        EMIT("    MOV BX, %s[SI]", nom_asm(ntab));
-    } else {
-        EMIT("    MOV BX, %s", nom_asm(src));
-    }
-}
-
-/*
- * stocker_ax_dans : emet les instructions pour stocker AX dans
- * la destination 'dst'.
- *   - Si dst est un acces tableau : calcul index * 2, T[SI] = AX
- *   - Sinon                       : MOV nom, AX
- */
-static void stocker_ax_dans(FILE *f, const char *dst)
-{
-    char ntab[64], idx[64];
-
-    if (est_tableau_access(dst, ntab, idx)) {
-        /* Ecriture tableau T[i] = AX  (diapo 141) */
-        if (est_nombre(idx)) {
-            long offset = atol(idx) * 2;
-            EMIT("    MOV SI, %ld", offset);
-        } else {
-            EMIT("    MOV SI, %s", nom_asm(idx));
-            EMIT("    ADD SI, SI");
-        }
-        EMIT("    MOV %s[SI], AX", nom_asm(ntab));
-    } else {
-        EMIT("    MOV %s, AX", nom_asm(dst));
-    }
-}
-
-/* =========================================================
-   CONVERSION ENTIER -> CHAINE (pour OUT)
-   Procedure itoa_proc en assembleur, appelee via CALL.
-   On inclut une mini-routine dans le segment de code qui convertit
-   AX en chaine decimale dans _OUT_BUF puis appelle INT 21h.
-   ========================================================= */
+/* Procedure d'affichage d'un entier (AX) via DOS INT 21h */
 static void emettre_proc_print(FILE *f)
 {
-    EMIT(";---- Procedure d'affichage d'un entier dans AX ----");
+    EMIT(";---- _PRINT_INT : affiche AX en decimal ----");
     EMIT("_PRINT_INT PROC NEAR");
-    EMIT("    ; Convertit AX en chaine et affiche via DOS INT 21h");
-    EMIT("    PUSH AX");
-    EMIT("    PUSH BX");
-    EMIT("    PUSH CX");
-    EMIT("    PUSH DX");
-    EMIT("    PUSH SI");
+    EMIT("    PUSH AX"); EMIT("    PUSH BX"); EMIT("    PUSH CX");
+    EMIT("    PUSH DX"); EMIT("    PUSH SI");
     EMIT("    MOV SI, OFFSET _OUT_BUF");
-    EMIT("    ; Gerer le signe negatif");
     EMIT("    CMP AX, 0");
     EMIT("    JGE _PRINT_POS");
     EMIT("    MOV BYTE PTR [SI], '-'");
     EMIT("    INC SI");
     EMIT("    NEG AX");
     EMIT("_PRINT_POS:");
-    EMIT("    ; Divisor BX = 10, CX compte les chiffres");
     EMIT("    MOV BX, 10");
     EMIT("    MOV CX, 0");
     EMIT("_DIV_LOOP:");
     EMIT("    MOV DX, 0");
-    EMIT("    DIV BX             ; AX = AX / 10, DX = reste");
+    EMIT("    DIV BX          ; AX = AX/10, DX = reste");
     EMIT("    ADD DL, '0'");
-    EMIT("    PUSH DX            ; empiler le chiffre (LIFO => ordre inverse)");
+    EMIT("    PUSH DX         ; empiler les chiffres (ordre inverse)");
     EMIT("    INC CX");
     EMIT("    CMP AX, 0");
     EMIT("    JNE _DIV_LOOP");
@@ -384,56 +258,41 @@ static void emettre_proc_print(FILE *f)
     EMIT("    MOV [SI], DL");
     EMIT("    INC SI");
     EMIT("    LOOP _POP_LOOP");
-    EMIT("    MOV BYTE PTR [SI], '$'  ; terminateur DOS");
+    EMIT("    MOV BYTE PTR [SI], '$'");
     EMIT("    MOV AH, 09h");
     EMIT("    MOV DX, OFFSET _OUT_BUF");
     EMIT("    INT 21h");
-    EMIT("    ; Afficher un espace separateur");
-    EMIT("    MOV AH, 02h");
-    EMIT("    MOV DL, ' '");
-    EMIT("    INT 21h");
-    EMIT("    POP SI");
-    EMIT("    POP DX");
-    EMIT("    POP CX");
-    EMIT("    POP BX");
-    EMIT("    POP AX");
+    EMIT("    POP SI"); EMIT("    POP DX"); EMIT("    POP CX");
+    EMIT("    POP BX"); EMIT("    POP AX");
     EMIT("    RET");
     EMIT("_PRINT_INT ENDP");
     EMIT("");
 }
 
-/* =========================================================
-   PROCEDURE DE LECTURE CLAVIER (INPUT)
-   Lit un entier depuis stdin via INT 21h buffered input.
-   Stocke le resultat (valeur ASCII-decoded) dans AX.
-   La variable cible sera affectee ensuite.
-   ========================================================= */
+/* Procedure de lecture d'un entier depuis le clavier (resultat dans AX) */
 static void emettre_proc_input(FILE *f)
 {
-    EMIT(";---- Procedure de lecture d'un entier depuis le clavier ----");
+    EMIT(";---- _READ_INT : lit un entier depuis le clavier ----");
     EMIT("_READ_INT PROC NEAR");
-    EMIT("    ; Lit les caracteres un a un (INT 21h AH=01h) et construit l'entier");
-    EMIT("    PUSH BX");
-    EMIT("    PUSH CX");
-    EMIT("    PUSH DX");
-    EMIT("    MOV BX, 0     ; accumulateur");
-    EMIT("    MOV CX, 0     ; signe (0=positif, 1=negatif)");
+    EMIT("    PUSH BX"); EMIT("    PUSH CX"); EMIT("    PUSH DX");
+    EMIT("    MOV BX, 0   ; accumulateur");
+    EMIT("    MOV CX, 0   ; signe (0=positif, 1=negatif)");
     EMIT("_READ_CHAR:");
     EMIT("    MOV AH, 01h");
-    EMIT("    INT 21h       ; AL = caractere lu (avec echo)");
-    EMIT("    CMP AL, 0Dh   ; Entree (CR) ?");
+    EMIT("    INT 21h     ; AL = caractere lu");
+    EMIT("    CMP AL, 0Dh ; Entree ?");
     EMIT("    JE  _READ_DONE");
     EMIT("    CMP AL, '-'");
     EMIT("    JNE _READ_DIGIT");
-    EMIT("    MOV CX, 1     ; marquer negatif");
+    EMIT("    MOV CX, 1");
     EMIT("    JMP _READ_CHAR");
     EMIT("_READ_DIGIT:");
-    EMIT("    SUB AL, '0'   ; convertir ASCII -> chiffre");
-    EMIT("    CBW            ; etendre AL vers AX");
+    EMIT("    SUB AL, '0'");
+    EMIT("    CBW");
     EMIT("    XCHG AX, BX");
     EMIT("    MOV DX, 10");
-    EMIT("    MUL DX        ; AX = BX * 10");
-    EMIT("    ADD AX, BX    ; AX = AX + nouveau chiffre");
+    EMIT("    MUL DX");
+    EMIT("    ADD AX, BX");
     EMIT("    XCHG AX, BX");
     EMIT("    JMP _READ_CHAR");
     EMIT("_READ_DONE:");
@@ -442,59 +301,37 @@ static void emettre_proc_input(FILE *f)
     EMIT("    JNE _READ_POS");
     EMIT("    NEG AX");
     EMIT("_READ_POS:");
-    EMIT("    ; newline");
-    EMIT("    MOV AH, 02h");
-    EMIT("    MOV DL, 0Ah");
-    EMIT("    INT 21h");
-    EMIT("    POP DX");
-    EMIT("    POP CX");
-    EMIT("    POP BX");
+    EMIT("    POP DX"); EMIT("    POP CX"); EMIT("    POP BX");
     EMIT("    RET");
     EMIT("_READ_INT ENDP");
     EMIT("");
 }
 
 /* =========================================================
-   COMPTEUR DE LABELS pour BZ/BR
-   Chaque quadruplet BZ/BR a besoin d'un label de saut.
-   On genere des labels L0, L1, L2, ... associes aux indices.
+   LABELS DE SAUT
    ========================================================= */
 
-/*
- * label_pour : retourne le label assembleur correspondant a un index
- * de quadruplet (ex: index 5 => "L5").
- */
-static void label_pour(int idx, char *buf)
-{
-    sprintf(buf, "L%d", idx);
-}
+static void label_pour(int idx, char *buf) { sprintf(buf, "L%d", idx); }
 
-/*
- * indices_cibles : construit un tableau marque[qc] ou marque[i]=1
- * si l'indice i est une cible de saut (BZ ou BR) => on placera un label.
- */
+/* Marque les indices cibles de BZ/BR (on posera un label a ces endroits) */
 static void marquer_cibles(int *marque)
 {
     int i;
     memset(marque, 0, qc * sizeof(int));
     for (i = 0; i < qc; i++) {
-        if (strcmp(quad[i].oper, "BZ") == 0 || strcmp(quad[i].oper, "BR") == 0) {
-            if (quad[i].res && quad[i].res[0] != '\0') {
-                int cible = atoi(quad[i].res);
-                if (cible >= 0 && cible < qc)
-                    marque[cible] = 1;
-            }
+        if (strcmp(quad[i].oper,"BZ")==0 || strcmp(quad[i].oper,"BR")==0) {
+            int cible = atoi(quad[i].res);
+            if (cible >= 0 && cible < qc) marque[cible] = 1;
         }
     }
-    /* La premiere instruction est toujours une cible implicite (Debut:) */
-    if (qc > 0) marque[0] = 1;
+    if (qc > 0) marque[0] = 1; /* le debut est toujours une cible */
 }
 
 /* =========================================================
    TRADUCTION D'UN QUADRUPLET
    ========================================================= */
 
-static void traduire_quadruplet(FILE *f, int idx, int *marque_label)
+static void traduire_quadruplet(FILE *f, int idx, int *marque)
 {
     const char *op  = quad[idx].oper;
     const char *a   = quad[idx].op1;
@@ -503,147 +340,80 @@ static void traduire_quadruplet(FILE *f, int idx, int *marque_label)
     char lbl[32];
 
     /* Placer un label si cet indice est une cible de saut */
-    if (marque_label[idx]) {
-        label_pour(idx, lbl);
-        EMIT("%s:", lbl);
-    }
+    if (marque[idx]) { label_pour(idx, lbl); EMIT("%s:", lbl); }
 
-    /* ---- Commentaire de reference ---- */
+    /* Commentaire de reference */
     EMIT("    ; [%d] (%s, %s, %s, %s)", idx, op, a, b, res);
 
-    /* ============================================================
-       AFFECTATION SIMPLE  res := a
-       diapo 125 : MOV var, val / MOV reg, var
-       ============================================================ */
+    /* ---- Affectation simple  res := a ---- */
     if (strcmp(op, ":=") == 0) {
-        /* Verifier si res est un acces tableau */
-        char ntab_res[64], idx_res[64];
-        int res_est_tab = est_tableau_access(res, ntab_res, idx_res);
-
-        charger_dans_ax(f, a);
-        if (res_est_tab) {
-            stocker_ax_dans(f, res);
-        } else {
-            stocker_ax_dans(f, res);
-        }
+        charger_dans_reg(f, a, "AX");
+        stocker_ax_dans(f, res);
         return;
     }
 
-    /* ============================================================
-       ADDITION   res = a + b
-       diapo 127 : ADD AX, BX
-       ============================================================ */
-    if (strcmp(op, "+") == 0) {
-        charger_dans_ax(f, a);
-        if (est_nombre(b)) {
-            long v = (long)atof(b);
-            EMIT("    ADD AX, %ld", v);
-        } else {
-            charger_dans_bx(f, b);
-            EMIT("    ADD AX, BX");
+    /* ---- Addition et Soustraction  res = a +/- b ----
+       On factorise les deux car le schema est identique. */
+    if (strcmp(op,"+")==0 || strcmp(op,"-")==0) {
+        const char *mnem = (strcmp(op,"+")==0) ? "ADD" : "SUB";
+        charger_dans_reg(f, a, "AX");
+        if (est_nombre(b))
+            EMIT("    %s AX, %ld", mnem, (long)atof(b));
+        else {
+            charger_dans_reg(f, b, "BX");
+            EMIT("    %s AX, BX", mnem);
         }
         stocker_ax_dans(f, res);
         return;
     }
 
-    /* ============================================================
-       SOUSTRACTION   res = a - b
-       diapo 127 : SUB AX, BX
-       ============================================================ */
-    if (strcmp(op, "-") == 0) {
-        charger_dans_ax(f, a);
-        if (est_nombre(b)) {
-            long v = (long)atof(b);
-            EMIT("    SUB AX, %ld", v);
-        } else {
-            charger_dans_bx(f, b);
-            EMIT("    SUB AX, BX");
-        }
+    /* ---- Multiplication et Division  res = a * / b ----
+       Schema identique : charger BX, puis IMUL ou IDIV.
+       La division a besoin de CWD pour etendre AX vers DX:AX. */
+    if (strcmp(op,"*")==0 || strcmp(op,"/")==0) {
+        int est_div = (strcmp(op,"/") == 0);
+        charger_dans_reg(f, a, "AX");
+        if (est_nombre(b))
+            EMIT("    MOV BX, %ld", (long)atof(b));
+        else
+            charger_dans_reg(f, b, "BX");
+        if (est_div) EMIT("    CWD            ; etendre AX -> DX:AX");
+        EMIT("    %s BX", est_div ? "IDIV" : "IMUL");
         stocker_ax_dans(f, res);
         return;
     }
 
-    /* ============================================================
-       MULTIPLICATION   res = a * b
-       8086 : MUL src  (AX = AX * src, resultat dans DX:AX)
-       On utilise IMUL (signe) pour coherence avec les entiers signes.
-       ============================================================ */
-    if (strcmp(op, "*") == 0) {
-        charger_dans_ax(f, a);
-        if (est_nombre(b)) {
-            long v = (long)atof(b);
-            EMIT("    MOV BX, %ld", v);
-        } else {
-            charger_dans_bx(f, b);
-        }
-        EMIT("    IMUL BX            ; DX:AX = AX * BX (signe)");
-        /* On ne garde que AX (16 bits) - suffisant pour les programmes du cours */
-        stocker_ax_dans(f, res);
-        return;
-    }
-
-    /* ============================================================
-       DIVISION   res = a / b
-       8086 : IDIV src  (AX = DX:AX / src, AX=quotient, DX=reste)
-       DX doit etre etendu signe depuis AX avant (CWD).
-       ============================================================ */
-    if (strcmp(op, "/") == 0) {
-        charger_dans_ax(f, a);
-        if (est_nombre(b)) {
-            long v = (long)atof(b);
-            EMIT("    MOV BX, %ld", v);
-        } else {
-            charger_dans_bx(f, b);
-        }
-        EMIT("    CWD                ; etendre AX vers DX:AX (signe)");
-        EMIT("    IDIV BX            ; AX = quotient, DX = reste");
-        stocker_ax_dans(f, res);
-        return;
-    }
-
-    /* ============================================================
-       NEGATION UNAIRE   res = -a
-       ============================================================ */
+    /* ---- Negation unaire  res = -a ---- */
     if (strcmp(op, "NEG") == 0) {
-        charger_dans_ax(f, a);
+        charger_dans_reg(f, a, "AX");
         EMIT("    NEG AX");
         stocker_ax_dans(f, res);
         return;
     }
 
-    /* ============================================================
-       COMPARAISONS   res = (a op b)  => res vaut 1 (vrai) ou 0 (faux)
-       Principe (diapo 128-130) :
-         CMP AX, BX   ; flags mis a jour
-         Jcond VRAI   ; si condition vraie, sauter
-         MOV res, 0   ; sinon res = 0
-         JMP SUITE
-         VRAI: MOV res, 1
-         SUITE:
-       ============================================================ */
-    if (strcmp(op, "==") == 0 || strcmp(op, "!=") == 0 ||
-        strcmp(op, "<")  == 0 || strcmp(op, ">")  == 0 ||
-        strcmp(op, "<=") == 0 || strcmp(op, ">=") == 0) {
+    /* ---- Comparaisons  res = (a op b)  =>  0 ou 1 ----
+       Table de correspondance operateur -> saut conditionnel. */
+    if (strcmp(op,"==")==0 || strcmp(op,"!=")==0 ||
+        strcmp(op,"<") ==0 || strcmp(op,">") ==0 ||
+        strcmp(op,"<=")==0 || strcmp(op,">=")==0) {
 
-        /* Mnemonique de saut conditionnel correspondant */
-        const char *jcond = "JE"; /* == */
-        if      (strcmp(op, "!=") == 0) jcond = "JNE";
-        else if (strcmp(op, "<")  == 0) jcond = "JL";
-        else if (strcmp(op, ">")  == 0) jcond = "JG";
-        else if (strcmp(op, "<=") == 0) jcond = "JLE";
-        else if (strcmp(op, ">=") == 0) jcond = "JGE";
+        /* Trouver le mnemonique de saut */
+        const char *jcond = "JE";
+        if      (strcmp(op,"!=") == 0) jcond = "JNE";
+        else if (strcmp(op,"<")  == 0) jcond = "JL";
+        else if (strcmp(op,">")  == 0) jcond = "JG";
+        else if (strcmp(op,"<=") == 0) jcond = "JLE";
+        else if (strcmp(op,">=") == 0) jcond = "JGE";
 
-        /* Labels locaux uniques pour ce quadruplet */
         char lbl_vrai[32], lbl_suite[32];
         sprintf(lbl_vrai,  "_CMP%d_V", idx);
         sprintf(lbl_suite, "_CMP%d_S", idx);
 
-        charger_dans_ax(f, a);
-        if (est_nombre(b)) {
-            long v = (long)atof(b);
-            EMIT("    CMP AX, %ld", v);
-        } else {
-            charger_dans_bx(f, b);
+        charger_dans_reg(f, a, "AX");
+        if (est_nombre(b))
+            EMIT("    CMP AX, %ld", (long)atof(b));
+        else {
+            charger_dans_reg(f, b, "BX");
             EMIT("    CMP AX, BX");
         }
         EMIT("    %s %s", jcond, lbl_vrai);
@@ -655,31 +425,21 @@ static void traduire_quadruplet(FILE *f, int idx, int *marque_label)
         return;
     }
 
-    /* ============================================================
-       LOGIQUE AND / OR / NON
-       res = a AND b  =>  res = a & b (pour des valeurs 0/1)
-       On utilise AND/OR sur AX et BX directement.
-       ============================================================ */
-    if (strcmp(op, "AND") == 0) {
-        charger_dans_ax(f, a);
-        charger_dans_bx(f, b);
-        EMIT("    AND AX, BX");
+    /* ---- AND et OR logiques  (meme schema, mnemonique different) ---- */
+    if (strcmp(op,"AND")==0 || strcmp(op,"OR")==0) {
+        charger_dans_reg(f, a, "AX");
+        charger_dans_reg(f, b, "BX");
+        EMIT("    %s AX, BX", op);   /* AND AX,BX  ou  OR AX,BX */
         stocker_ax_dans(f, res);
         return;
     }
-    if (strcmp(op, "OR") == 0) {
-        charger_dans_ax(f, a);
-        charger_dans_bx(f, b);
-        EMIT("    OR  AX, BX");
-        stocker_ax_dans(f, res);
-        return;
-    }
+
+    /* ---- NON logique : 0->1, non-zero->0 ---- */
     if (strcmp(op, "NON") == 0) {
-        /* NON logique : si AX == 0 => 1, sinon => 0  */
         char lbl_un[32], lbl_fin[32];
         sprintf(lbl_un,  "_NON%d_U", idx);
         sprintf(lbl_fin, "_NON%d_F", idx);
-        charger_dans_ax(f, a);
+        charger_dans_reg(f, a, "AX");
         EMIT("    CMP AX, 0");
         EMIT("    JE  %s", lbl_un);
         EMIT("    MOV AX, 0");
@@ -691,42 +451,29 @@ static void traduire_quadruplet(FILE *f, int idx, int *marque_label)
         return;
     }
 
-    /* ============================================================
-       SAUT CONDITIONNEL  BZ cond _ cible
-       Si cond == 0 (faux), sauter au label Lcible.
-       diapo 130 : CMP + JE
-       ============================================================ */
+    /* ---- Saut conditionnel  BZ : si a == 0, aller a res ---- */
     if (strcmp(op, "BZ") == 0) {
-        charger_dans_ax(f, a);
+        char cible[32];
+        label_pour(atoi(res), cible);
+        charger_dans_reg(f, a, "AX");
         EMIT("    CMP AX, 0");
-        char cible_lbl[32];
-        label_pour(atoi(res), cible_lbl);
-        EMIT("    JE  %s            ; sauter si condition fausse", cible_lbl);
+        EMIT("    JE  %s", cible);
         return;
     }
 
-    /* ============================================================
-       SAUT INCONDITIONNEL  BR _ _ cible
-       diapo 130 : JMP label
-       ============================================================ */
+    /* ---- Saut inconditionnel  BR : aller a res ---- */
     if (strcmp(op, "BR") == 0) {
-        char cible_lbl[32];
-        label_pour(atoi(res), cible_lbl);
-        EMIT("    JMP %s", cible_lbl);
+        char cible[32];
+        label_pour(atoi(res), cible);
+        EMIT("    JMP %s", cible);
         return;
     }
 
-    /* ============================================================
-       ACCES TABLEAU (lecture)  res = TAB[indice]
-       Genere par le compilateur avec operateur "TAB".
-       diapo 141 : MOV SI, indice*2 / MOV AX, T[SI]
-       ============================================================ */
+    /* ---- Lecture tableau  res = TAB[b] ---- */
     if (strcmp(op, "TAB") == 0) {
-        /* a = nom du tableau, b = indice */
-        if (est_nombre(b)) {
-            long offset = atol(b) * 2;
-            EMIT("    MOV SI, %ld", offset);
-        } else {
+        if (est_nombre(b))
+            EMIT("    MOV SI, %ld", atol(b) * 2);
+        else {
             EMIT("    MOV SI, %s", nom_asm(b));
             EMIT("    ADD SI, SI");
         }
@@ -735,73 +482,47 @@ static void traduire_quadruplet(FILE *f, int idx, int *marque_label)
         return;
     }
 
-    /* ============================================================
-       SORTIE  out variable/literal
-       Appel de la procedure _PRINT_INT pour les nombres.
-       Pour les chaines (STRING), on les inclut inline dans les donnees.
-       ============================================================ */
+    /* ---- Affichage  out variable ou chaine ---- */
     if (strcmp(op, "out") == 0) {
-        /* Detecter si c'est une chaine litterale (commence et finit par ") */
         if (a && a[0] == '"') {
-            /* Chaine : afficher via INT 21h AH=09h directement */
-            /* On a besoin d'un label unique pour cette chaine dans le segment donnees */
-            /* Simple approche : afficher caractere par caractere via AH=02h */
-            EMIT("    ; OUT chaine (affichage caractere par caractere)");
-            const char *p = a + 1; /* sauter le guillemet ouvrant */
+            /* Chaine litterale : afficher caractere par caractere */
+            const char *p = a + 1;
             while (*p && *p != '"') {
-                unsigned char c = (unsigned char)*p;
-                if (c == '\\' && *(p+1) == 'n') {
-                    EMIT("    MOV AH, 02h");
-                    EMIT("    MOV DL, 0Ah");
-                    EMIT("    INT 21h");
-                    p += 2; continue;
+                if (*p == '\\' && *(p+1) == 'n') {
+                    emit_newline(f); p += 2; continue;
                 }
                 EMIT("    MOV AH, 02h");
-                EMIT("    MOV DL, %d       ; '%c'", c, (c >= 32 && c < 127) ? c : '?');
+                EMIT("    MOV DL, %d   ; '%c'", (unsigned char)*p, *p);
                 EMIT("    INT 21h");
                 p++;
             }
-            /* Newline apres la chaine */
-            EMIT("    MOV AH, 02h");
-            EMIT("    MOV DL, 0Ah");
-            EMIT("    INT 21h");
         } else {
-            /* Nombre ou variable : appel _PRINT_INT */
-            charger_dans_ax(f, a);
+            /* Variable ou nombre : appel _PRINT_INT */
+            charger_dans_reg(f, a, "AX");
             EMIT("    CALL _PRINT_INT");
-            /* Newline */
-            EMIT("    MOV AH, 02h");
-            EMIT("    MOV DL, 0Ah");
-            EMIT("    INT 21h");
         }
+        emit_newline(f);
         return;
     }
 
-    /* ============================================================
-       ENTREE  input _ _ variable
-       Appel de la procedure _READ_INT.
-       ============================================================ */
+    /* ---- Lecture clavier  input -> res ---- */
     if (strcmp(op, "input") == 0) {
-        EMIT("    CALL _READ_INT     ; resultat dans AX");
+        EMIT("    CALL _READ_INT   ; resultat dans AX");
         stocker_ax_dans(f, res);
         return;
     }
 
-    /* ============================================================
-       NOP : ne rien generer
-       ============================================================ */
-    if (strcmp(op, "NOP") == 0) {
-        EMIT("    NOP");
-        return;
-    }
+    /* ---- NOP : rien a generer ---- */
+    if (strcmp(op, "NOP") == 0) return;
 
-    /* Operateur inconnu : commentaire d'avertissement */
-    EMIT("    ; *** AVERTISSEMENT: operateur non reconnu '%s' ***", op);
+    /* Operateur inconnu */
+    EMIT("    ; *** operateur non reconnu : '%s' ***", op);
 }
 
 /* =========================================================
    POINT D'ENTREE PRINCIPAL
    ========================================================= */
+
 void generer_asm(const char *nom_fichier)
 {
     if (!nom_fichier || !nom_fichier[0])
@@ -809,82 +530,69 @@ void generer_asm(const char *nom_fichier)
 
     FILE *f = fopen(nom_fichier, "w");
     if (!f) {
-        fprintf(stderr, "ERREUR: impossible de creer le fichier '%s'\n", nom_fichier);
+        fprintf(stderr, "ERREUR: impossible de creer '%s'\n", nom_fichier);
         return;
     }
 
-    printf("\n=== Generation du code assembleur 8086 : %s ===\n", nom_fichier);
+    printf("\n=== Generation assembleur 8086 : %s ===\n", nom_fichier);
 
-    /* ----- Collecte de tous les symboles a declarer ----- */
     collecter_symboles();
 
-    /* ----- En-tete du programme (diapo 118) ----- */
+    /* En-tete */
     EMIT("TITLE prolang.asm");
-    EMIT(";");
-    EMIT("; Code assembleur 8086 genere automatiquement par le compilateur Prolang");
-    EMIT("; USTHB 2025-2026 - SAYOUD Lynda");
-    EMIT(";");
+    EMIT("; Code 8086 genere automatiquement");
     EMIT("");
 
-    /* ----- Segment de pile (diapo 133-136) ----- */
+    /* Segment de pile */
     EMIT("PILE SEGMENT STACK");
-    EMIT("    DW 100 DUP (?)     ; reserve 100 mots = 200 octets pour la pile");
-    EMIT("base_pile EQU $        ; etiquette base de la pile");
+    EMIT("    DW 100 DUP (?)");
+    EMIT("base_pile EQU $");
     EMIT("PILE ENDS");
     EMIT("");
 
-    /* ----- Segment de donnees (diapo 137-141) ----- */
+    /* Segment de donnees */
     emettre_segment_donnees(f);
 
-    /* ----- Segment de code (diapo 142) ----- */
+    /* Segment de code */
     EMIT("LECODE SEGMENT");
     EMIT("");
-
-    /* Procedures utilitaires (print et read) */
     emettre_proc_print(f);
     emettre_proc_input(f);
 
-    /* Point d'entree du programme */
+    /* Point d'entree */
     EMIT("Debut:");
     EMIT("    ASSUME CS:LECODE, DS:DONNEE, SS:PILE");
     EMIT("");
-    EMIT("    ; Initialisation des segments (diapo 136)");
     EMIT("    MOV AX, DONNEE");
-    EMIT("    MOV DS, AX         ; DS pointe sur le segment de donnees");
+    EMIT("    MOV DS, AX");
     EMIT("    MOV AX, PILE");
-    EMIT("    MOV SS, AX         ; SS pointe sur le segment de pile");
-    EMIT("    MOV SP, base_pile  ; SP pointe sur la base de la pile (pile vide)");
+    EMIT("    MOV SS, AX");
+    EMIT("    MOV SP, base_pile");
     EMIT("");
 
-    /* Marquer les cibles de saut */
+    /* Marquer les cibles de saut puis traduire */
     int *marque = (int *)calloc(qc + 1, sizeof(int));
     if (!marque) { fclose(f); return; }
     marquer_cibles(marque);
 
-    /* ----- Traduire chaque quadruplet ----- */
     int i;
     for (i = 0; i < qc; i++) {
         traduire_quadruplet(f, i, marque);
         EMIT("");
     }
 
-    /* Etiquette de fin (cible potentielle de BR vers la fin) */
+    /* Label de fin + terminaison DOS */
     char lbl_fin[32];
     label_pour(qc, lbl_fin);
     EMIT("%s:", lbl_fin);
-
-    /* Terminaison DOS (diapo 145 : MOV AH, 4Ch / INT 21h) */
-    EMIT("    ; Terminaison du programme (DOS)");
     EMIT("    MOV AH, 4Ch");
     EMIT("    INT 21h");
     EMIT("");
     EMIT("LECODE ENDS");
     EMIT("");
-    EMIT("; ----- Fin du programme -----");
     EMIT("END Debut");
 
     free(marque);
     fclose(f);
-
-    printf("[Code assembleur genere avec succes : %s]\n", nom_fichier);
+    printf("[Fichier genere : %s]\n", nom_fichier);
 }

@@ -300,11 +300,16 @@ static int propagation_copie(void)
 {
     int modifie = 0, i;
     for (i = 0; i < qc; i++) {
-        if (strcmp(quad[i].oper, ":=") != 0) continue; // on cherche les affectations simples
+        if (strcmp(quad[i].oper, ":=") != 0) continue; /* on cherche les affectations simples */
         const char *src = quad[i].op1;  /* valeur source */
         const char *dst = quad[i].res;  /* variable destination */
         if (!src || !*src || !dst || !*dst) continue;
         if (strcmp(src, dst) == 0) continue;  /* affectation a soi-meme : rien a faire */
+
+        /* On ne propage que les temporaires (T0, T1, ...)
+           Propager une variable utilisateur (i, j, x...) est dangereux
+           dans les boucles : i:=1 puis i=i+1 => on ne peut pas remplacer i par 1 partout */
+        if (!est_temporaire(dst)) continue;
 
         int j;
         for (j = i + 1; j < qc; j++) {

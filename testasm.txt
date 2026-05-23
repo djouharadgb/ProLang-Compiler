@@ -1,0 +1,45 @@
+BeginProject Testarith;
+
+Setup:
+    define a | b : integer;
+    define res : integer;
+    define x : float;
+    define y : float;
+    const Max : integer = 100;
+
+Run:
+{
+    a <-- 10;
+    b <-- 3;
+
+    res <-- a + b;
+    out("a + b = ", res);
+
+    res <-- a - b;
+    out("a - b = ", res);
+
+    res <-- a * b;
+    out("a * b = ", res);
+
+    res <-- a / b;
+    out("a / b = ", res);
+
+    res <-- (a + b) * 2;
+    out("(a+b)*2 = ", res);
+
+    res <-- a * a + b * b;
+    out("a*a + b*b = ", res);
+
+    res <-- (a + b) * (a - b);
+    out("(a+b)*(a-b) = ", res);
+
+    x <-- 7.5;
+    y <-- 2.5;
+    out("x = ", x);
+    out("y = ", y);
+
+    res <-- Max - a;
+    out("MAX - a = ", res);
+}
+
+EndProject;
