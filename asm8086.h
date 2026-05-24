@@ -20,11 +20,7 @@
    END Debut
  */
 
-/*
- generer_asm : point d'entree principal.
- nom_fichier : chemin du fichier .asm a creer (ex: "out.asm").
- Si nom_fichier == NULL, "sortie.asm" est utilise par defaut.
- */
+ 
 void generer_asm(const char *nom_fichier);
 
 #endif 

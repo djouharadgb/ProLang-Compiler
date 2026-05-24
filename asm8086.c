@@ -46,7 +46,7 @@ static const char *nom_asm(const char *s)
     return s;
 }
 
-/* Detecte & verifie si un acces tableau "nom[indice]" et extrait les deux parties.
+/* Detecte & verifie si un acces tableau "nom[indice]" et extrait nom, indice.
    Retourne 1 si c'est un acces tableau, 0 sinon. */
 static int est_tableau_access(const char *s, char *nom_tab, char *indice)
 {
@@ -81,29 +81,28 @@ static void charger_dans_reg(FILE *f, const char *src, const char *reg)
     char ntab[64], idx[64];
 
     if (est_nombre(src)) {
-        /* FIX : cast en long pour truncature correcte des flottants
-           ex: 3.141590 => 3, 2.500000 => 2 (8086 ne gere que les entiers) */
-        EMIT("    MOV %s, %ld", reg, (long)atof(src));
+        /* ex: 3.141590 => 3, 2.500000 => 2 (8086 ne gere que les entiers) */
+        EMIT("    MOV %s, %ld", reg, (long)atof(src)); // mov reg, val
 
     } else if (est_tableau_access(src, ntab, idx)) {
         /* Calcul de l'offset : chaque element fait 2 octets (DW) */
         if (est_nombre(idx))
-            EMIT("    MOV SI, %ld", atol(idx) * 2);
-        else {
-            EMIT("    MOV SI, %s", nom_asm(idx));
-            EMIT("    ADD SI, SI   ; SI = indice * 2");
+            EMIT("    MOV SI, %ld", atol(idx) * 2); // mov SI, idx*2
+        else { // indice non numerique (variable ou temporaire)
+            EMIT("    MOV SI, %s", nom_asm(idx)); // mov SI, idx
+            EMIT("    ADD SI, SI   ; SI = indice * 2");// add SI, SI
         }
-        EMIT("    MOV %s, %s[SI]", reg, nom_asm(ntab));
+        EMIT("    MOV %s, %s[SI]", reg, nom_asm(ntab));// mov reg, tab[SI]
 
     } else {
-        EMIT("    MOV %s, %s", reg, nom_asm(src));
+        EMIT("    MOV %s, %s", reg, nom_asm(src)); // mov reg, src
     }
 }
 
 /*
- * stocker_ax_dans : stocke AX dans la destination 'dst'.
- *   - Acces tableau => T[SI] = AX
- *   - Variable/temp => MOV nom, AX
+ stocker_ax_dans : stocke AX dans la destination 'dst'.
+   - Acces tableau => T[SI] = AX
+   - Variable/temp => MOV nom, AX
  */
 static void stocker_ax_dans(FILE *f, const char *dst)
 {
@@ -111,24 +110,22 @@ static void stocker_ax_dans(FILE *f, const char *dst)
 
     if (est_tableau_access(dst, ntab, idx)) {
         if (est_nombre(idx))
-            EMIT("    MOV SI, %ld", atol(idx) * 2);
+            EMIT("    MOV SI, %ld", atol(idx) * 2); // mov SI, idx*2 car idx cste we know value cste
         else {
-            EMIT("    MOV SI, %s", nom_asm(idx));
-            EMIT("    ADD SI, SI");
+            EMIT("    MOV SI, %s", nom_asm(idx));// mov SI, idx 
+            EMIT("    ADD SI, SI");// add SI, SI car idx est var 
         }
-        EMIT("    MOV %s[SI], AX", nom_asm(ntab));
+        EMIT("    MOV %s[SI], AX", nom_asm(ntab)); // mov tab[SI], AX
     } else {
-        EMIT("    MOV %s, AX", nom_asm(dst));
+        EMIT("    MOV %s, AX", nom_asm(dst));// mov dst, AX
     }
 }
 
-/* =========================================================
-   COLLECTE DES SYMBOLES (segment de donnees)
-   ========================================================= */
+/* COLLECTE DES SYMBOLES (segment de donnees)*/
 
 #define MAX_SYMS 512
 
-typedef struct {
+typedef struct { //structure symbole 
     char nom[128];
     char type[16];  /* "integer" ou "float" */
     char val[64];   /* valeur initiale ou "" */
@@ -136,10 +133,10 @@ typedef struct {
     int  est_temp;  /* 1 = temporaire compilateur  */
 } SymInfo;
 
-static SymInfo syms[MAX_SYMS];
+static SymInfo syms[MAX_SYMS]; // table de symboles collectes pour le segment de donnees (variables, constantes, tableaux, temporaires)
 static int     nb_syms = 0;
 
-static int sym_existe(const char *nom)
+static int sym_existe(const char *nom) // Verifie si un symbole de nom 'nom' existe deja dans syms[]
 {
     int i;
     for (i = 0; i < nb_syms; i++)
@@ -147,7 +144,7 @@ static int sym_existe(const char *nom)
     return 0;
 }
 
-static void sym_ajouter(const char *nom, const char *type,
+static void sym_ajouter(const char *nom, const char *type, //inserer tabe syminfo
                         const char *val, int taille, int est_temp)
 {
     if (nb_syms >= MAX_SYMS || sym_existe(nom)) return;
@@ -160,7 +157,10 @@ static void sym_ajouter(const char *nom, const char *type,
 }
 
 /* Parcourt la TS et les quadruplets pour collecter tous les symboles */
-static void collecter_symboles(void)
+/*variable : TS
+Temp: Quads 
+ */
+static void collecter_symboles(void) 
 {
     int i;
     nb_syms = 0;
@@ -170,7 +170,7 @@ static void collecter_symboles(void)
         NoeudTS *n = hashTable[i];
         while (n) {
             if (n->state == 1) {
-                int taille = (strcmp(n->code, "TABLEAU") == 0) ? atoi(n->val) : 0;
+                int taille = (strcmp(n->code, "TABLEAU") == 0) ? atoi(n->val) : 0; //tableau on recupere sa taille n->val, if not t=0
                 const char *val_init = (taille > 0) ? "" :
                     ((strcmp(n->code,"CONST")==0 || strlen(n->val)>0) ? n->val : "");
                 sym_ajouter(n->name, n->type, val_init, taille, 0);
@@ -193,16 +193,14 @@ static void collecter_symboles(void)
 
             /* Indice de tableau qui serait un temporaire */
             char ntab[64], idx[64];
-            if (est_tableau_access(s, ntab, idx))
+            if (est_tableau_access(s, ntab, idx)) //recupere nom et idx tableau
                 if (idx[0]=='T' && isdigit((unsigned char)idx[1]))
                     sym_ajouter(idx, "integer", "", 0, 1);
         }
     }
 }
 
-/* =========================================================
-   SEGMENT DE DONNEES
-   ========================================================= */
+/*SEGMENT DE DONNEES*/
 
 static void emettre_segment_donnees(FILE *f)
 {
@@ -214,19 +212,15 @@ static void emettre_segment_donnees(FILE *f)
         SymInfo *s = &syms[i];
         const char *anom = nom_asm(s->nom);
 
-        if (s->taille > 0) {
-            EMIT("    %-20s DW %d DUP(?)  ; tableau", anom, s->taille);
-        } else if (s->est_temp) {
-            EMIT("    %-20s DW ?          ; temporaire", anom);
-        } else if (strlen(s->val) > 0 && strcmp(s->val,"oui") != 0) {
-            /* Variable/constante initialisee.
-               FIX : les flottants sont stockes comme entiers (partie entiere)
-               car le 8086 en mode reel ne supporte pas les flottants natifs.
-               ex: 2.500000 => DW 2,  3.141590 => DW 3
-               Un commentaire indique la valeur flottante originale. */
+        if (s->taille > 0) {  // taille sup 0, tableau
+            EMIT("    %-20s DW %d DUP(?)  ; tableau", anom, s->taille); // ex: T0[10] => _T0 DW 10 DUP(?)
+        } else if (s->est_temp) { 
+            EMIT("    %-20s DW ?          ; temporaire", anom); //temporaire simple ex: T0 => _T0 DW ?
+        } else if (strlen(s->val) > 0 && strcmp(s->val,"oui") != 0) { // constante ou variable initialisee (on traite "oui" comme une valeur de tableau non initialisee)
+           
             long v = (long)atof(s->val);
             if (est_flottant(s->val))
-                EMIT("    %-20s DW %ld   ; float tronque (val orig: %s)", anom, v, s->val);
+                EMIT("    %-20s DW %ld   ; float tronque (val orig: %s)", anom, v, s->val); //
             else
                 EMIT("    %-20s DW %ld", anom, v);
         } else {
@@ -234,8 +228,7 @@ static void emettre_segment_donnees(FILE *f)
         }
     }
 
-    /* Tampon pour l'affichage (INT 21h attend '$' comme terminateur).
-       FIX : taille portee a 12 pour couvrir -32768 (6 chiffres + signe + marge). */
+    /* Tampon pour l'affichage (INT 21h attend '$' comme terminateur).*/
     EMIT("    _OUT_BUF             DB 12 DUP(?), '$'");
     EMIT("");
     EMIT("DONNEE ENDS");
@@ -324,11 +317,9 @@ static void emettre_proc_input(FILE *f)
     EMIT("");
 }
 
-/* =========================================================
-   LABELS DE SAUT
-   ========================================================= */
+/* LABELS DE SAUT */
 
-static void label_pour(int idx, char *buf) { sprintf(buf, "L%d", idx); }
+static void label_pour(int idx, char *buf) { sprintf(buf, "L%d", idx); } // genere un label unique pour l'indice de quadruplet donne (ex: L42 pour idx=42)
 
 /* Marque les indices cibles de BZ/BR (on posera un label a ces endroits) */
 static void marquer_cibles(int *marque)
@@ -344,9 +335,7 @@ static void marquer_cibles(int *marque)
     if (qc > 0) marque[0] = 1; /* le debut est toujours une cible */
 }
 
-/* =========================================================
-   TRADUCTION D'UN QUADRUPLET
-   ========================================================= */
+/* TRADUCTION D'UN QUADRUPLET*/
 
 static void traduire_quadruplet(FILE *f, int idx, int *marque)
 {
@@ -360,24 +349,23 @@ static void traduire_quadruplet(FILE *f, int idx, int *marque)
     if (marque[idx]) { label_pour(idx, lbl); EMIT("%s:", lbl); }
 
     /* Commentaire de reference */
-    EMIT("    ; [%d] (%s, %s, %s, %s)", idx, op, a, b, res);
+    EMIT("    ; [%d] (%s, %s, %s, %s)", idx, op, a, b, res); //quad commentaire dans asm pour reference
 
-    /* ---- Affectation simple  res := a ---- */
+    /* Affectation simple  res := a */
     if (strcmp(op, ":=") == 0) {
         charger_dans_reg(f, a, "AX");
         stocker_ax_dans(f, res);
         return;
     }
 
-    /* ---- Addition et Soustraction  res = a +/- b ----
+    /* Addition et Soustraction  res = a +/- b 
        On factorise les deux car le schema est identique. */
     if (strcmp(op,"+")==0 || strcmp(op,"-")==0) {
         const char *mnem = (strcmp(op,"+")==0) ? "ADD" : "SUB";
         charger_dans_reg(f, a, "AX");
         if (est_nombre(b))
-            /* FIX : cast en long pour truncature correcte des flottants
-               ex: 1.500000 => 1, 2.000000 => 2 */
-            EMIT("    %s AX, %ld", mnem, (long)atof(b));
+           
+            EMIT("    %s AX, %ld", mnem, (long)atof(b));// optimisations : x+0 => x, x-0 => x
         else {
             charger_dans_reg(f, b, "BX");
             EMIT("    %s AX, BX", mnem);
@@ -386,18 +374,13 @@ static void traduire_quadruplet(FILE *f, int idx, int *marque)
         return;
     }
 
-    /* ---- Multiplication et Division  res = a * / b ----
+    /* Multiplication et Division  res = a * / b 
        Schema identique : charger BX, puis IMUL ou IDIV.
        La division a besoin de CWD pour etendre AX vers DX:AX. */
     if (strcmp(op,"*")==0 || strcmp(op,"/")==0) {
         int est_div = (strcmp(op,"/") == 0);
         charger_dans_reg(f, a, "AX");
 
-        /* FIX Bug2 : multiplication par un flottant non entier (ex: 1.500000).
-           La troncature (long)atof("1.500000") = 1 donnait un resultat faux.
-           Cas n.5 : x * n.5  =>  x * (2n+1) puis SAR AX, 1  (division entiere par 2).
-           Ex: x * 1.5  =>  MOV BX, 3 ; IMUL BX ; SAR AX, 1
-               x * 2.5  =>  MOV BX, 5 ; IMUL BX ; SAR AX, 1                           */
         if (!est_div && est_nombre(b) && est_flottant(b)) {
             double fval = atof(b);
             long   ival = (long)fval;
@@ -411,8 +394,8 @@ static void traduire_quadruplet(FILE *f, int idx, int *marque)
         }
 
         if (est_nombre(b))
-            /* FIX : cast en long pour truncature correcte des flottants */
-            EMIT("    MOV BX, %ld", (long)atof(b));
+
+        EMIT("    MOV BX, %ld", (long)atof(b)); // optimisation : x*1 => x, x/1 => x
         else
             charger_dans_reg(f, b, "BX");
         if (est_div) EMIT("    CWD            ; etendre AX -> DX:AX");
@@ -421,7 +404,7 @@ static void traduire_quadruplet(FILE *f, int idx, int *marque)
         return;
     }
 
-    /* ---- Negation unaire  res = -a ---- */
+    /* Negation unaire  res = -a */
     if (strcmp(op, "NEG") == 0) {
         charger_dans_reg(f, a, "AX");
         EMIT("    NEG AX");
@@ -429,7 +412,7 @@ static void traduire_quadruplet(FILE *f, int idx, int *marque)
         return;
     }
 
-    /* ---- Comparaisons  res = (a op b)  =>  0 ou 1 ----
+    /* Comparaisons  res = (a op b)  =>  0 ou 1
        Table de correspondance operateur -> saut conditionnel. */
     if (strcmp(op,"==")==0 || strcmp(op,"!=")==0 ||
         strcmp(op,"<") ==0 || strcmp(op,">") ==0 ||
@@ -449,7 +432,6 @@ static void traduire_quadruplet(FILE *f, int idx, int *marque)
 
         charger_dans_reg(f, a, "AX");
         if (est_nombre(b))
-            /* FIX : cast en long pour truncature correcte des flottants */
             EMIT("    CMP AX, %ld", (long)atof(b));
         else {
             charger_dans_reg(f, b, "BX");
@@ -464,7 +446,7 @@ static void traduire_quadruplet(FILE *f, int idx, int *marque)
         return;
     }
 
-    /* ---- AND et OR logiques  (meme schema, mnemonique different) ---- */
+    /* AND et OR logiques  (meme schema, mnemonique different)*/
     if (strcmp(op,"AND")==0 || strcmp(op,"OR")==0) {
         charger_dans_reg(f, a, "AX");
         charger_dans_reg(f, b, "BX");
@@ -473,7 +455,7 @@ static void traduire_quadruplet(FILE *f, int idx, int *marque)
         return;
     }
 
-    /* ---- NON logique : 0->1, non-zero->0 ---- */
+    /* NON logique : 0->1, non-zero->0 */
     if (strcmp(op, "NON") == 0) {
         char lbl_un[32], lbl_fin[32];
         sprintf(lbl_un,  "_NON%d_U", idx);
@@ -490,7 +472,7 @@ static void traduire_quadruplet(FILE *f, int idx, int *marque)
         return;
     }
 
-    /* ---- Saut conditionnel  BZ : si a == 0, aller a res ---- */
+    /* Saut conditionnel  BZ : si a == 0, aller a res */
     if (strcmp(op, "BZ") == 0) {
         char cible[32];
         label_pour(atoi(res), cible);
@@ -500,7 +482,7 @@ static void traduire_quadruplet(FILE *f, int idx, int *marque)
         return;
     }
 
-    /* ---- Saut inconditionnel  BR : aller a res ---- */
+    /* Saut inconditionnel  BR : aller a res*/
     if (strcmp(op, "BR") == 0) {
         char cible[32];
         label_pour(atoi(res), cible);
@@ -508,7 +490,7 @@ static void traduire_quadruplet(FILE *f, int idx, int *marque)
         return;
     }
 
-    /* ---- Lecture tableau  res = TAB[b] ---- */
+    /* Lecture tableau  res = TAB[b] */
     if (strcmp(op, "TAB") == 0) {
         if (est_nombre(b))
             EMIT("    MOV SI, %ld", atol(b) * 2);
@@ -521,12 +503,11 @@ static void traduire_quadruplet(FILE *f, int idx, int *marque)
         return;
     }
 
-    /* ---- Affichage  out variable ou chaine ---- */
+    /* Affichage  out variable ou chaine */
     if (strcmp(op, "out") == 0) {
         if (a && a[0] == '"') {
-            /* Chaine litterale : afficher caractere par caractere.
-               FIX : gestion de toutes les sequences d'echappement courantes
-               (\n, \t, \\, \") au lieu de \n seulement. */
+           
+
             const char *p = a + 1;
             while (*p && *p != '"') {
                 if (*p == '\\') {
@@ -566,33 +547,26 @@ static void traduire_quadruplet(FILE *f, int idx, int *marque)
             charger_dans_reg(f, a, "AX");
             EMIT("    CALL _PRINT_INT");
         }
-        /* FIX Bug5 : une chaine litterale (ex: "Somme: ") est un libelle qui
-           precede la valeur sur la meme ligne => pas de saut de ligne apres.
-           Une variable ou un nombre est toujours l'element final => saut de ligne.
-           Cela traite correctement  out("label: ", x)  =>  "label: 42\n"
-           sans fusionner plusieurs instructions out() sur une seule ligne.    */
         if (!(a && a[0] == '"'))
             emit_newline(f);
         return;
     }
 
-    /* ---- Lecture clavier  input -> res ---- */
+    /* Lecture clavier  input -> res  */
     if (strcmp(op, "input") == 0) {
         EMIT("    CALL _READ_INT   ; resultat dans AX");
         stocker_ax_dans(f, res);
         return;
     }
 
-    /* ---- NOP : rien a generer ---- */
+    /* NOP : rien a generer  */
     if (strcmp(op, "NOP") == 0) return;
 
     /* Operateur inconnu */
     EMIT("    ; *** operateur non reconnu : '%s' ***", op);
 }
 
-/* =========================================================
-   POINT D'ENTREE PRINCIPAL
-   ========================================================= */
+/* POINT D'ENTREE PRINCIPAL */
 
 void generer_asm(const char *nom_fichier)
 {
@@ -611,7 +585,7 @@ void generer_asm(const char *nom_fichier)
 
     /* En-tete */
     EMIT("TITLE prolang.asm");
-    EMIT("; Code 8086 genere automatiquement");
+    EMIT("; Code 8086 genere automatiquement :))");
     EMIT("");
 
     /* Segment de pile */
