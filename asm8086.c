@@ -11,6 +11,7 @@
 
 
 /* Verifie si s est un nombre (ex: 42, -3, 1.5) */
+// utilisee pour detecter les constantes dans les optimisations (ex: x+0 => x)
 static int est_nombre(const char *s)
 {
     if (!s || !*s) return 0;
@@ -23,6 +24,13 @@ static int est_nombre(const char *s)
         else if (!isdigit((unsigned char)*p)) return 0;
     }
     return 1;
+}
+
+/* Verifie si s est un nombre flottant (contient un point decimal) */
+static int est_flottant(const char *s)
+{
+    if (!est_nombre(s)) return 0;
+    return strchr(s, '.') != NULL;
 }
 
 /* Convertit un nom de variable en identifiant asm valide.
@@ -38,7 +46,7 @@ static const char *nom_asm(const char *s)
     return s;
 }
 
-/* Detecte un acces tableau "nom[indice]" et extrait les deux parties.
+/* Detecte & verifie si un acces tableau "nom[indice]" et extrait les deux parties.
    Retourne 1 si c'est un acces tableau, 0 sinon. */
 static int est_tableau_access(const char *s, char *nom_tab, char *indice)
 {
@@ -48,11 +56,11 @@ static int est_tableau_access(const char *s, char *nom_tab, char *indice)
     int n = (int)(lbr - s);
     strncpy(nom_tab, s, n); nom_tab[n] = '\0';
     int m = (int)(rbr - lbr - 1);
-    strncpy(indice, lbr + 1, m); indice[m] = '\0';
+    strncpy(indice, lbr + 1, m); indice[m] = '\0'; 
     return 1;
 }
 
-/* Emet un saut de ligne dans la sortie (separateur visuel) */
+/* Emet un saut de ligne dans la sortie (separateur visuel)- affichage brk */
 static void emit_newline(FILE *f)
 {
     EMIT("    MOV AH, 02h");
@@ -65,16 +73,18 @@ static void emit_newline(FILE *f)
    ========================================================= */
 
 /*
- * charger_dans_reg : place la valeur de 'src' dans le registre 'reg' (AX ou BX).
- *   - Nombre litteral   => MOV reg, valeur
- *   - Acces tableau     => calcul index*2, puis MOV reg, tab[SI]
- *   - Variable/temp     => MOV reg, nom
+ charger_dans_reg : place la valeur de 'src' dans le registre 'reg' (AX ou BX).
+  - Nombre litteral   => MOV reg, valeur  (partie entiere uniquement pour 8086)
+- Acces tableau     => calcul index*2, puis MOV reg, tab[SI]
+   - Variable/temp     => MOV reg, nom
  */
 static void charger_dans_reg(FILE *f, const char *src, const char *reg)
 {
     char ntab[64], idx[64];
 
     if (est_nombre(src)) {
+        /* FIX : cast en long pour truncature correcte des flottants
+           ex: 3.141590 => 3, 2.500000 => 2 (8086 ne gere que les entiers) */
         EMIT("    MOV %s, %ld", reg, (long)atof(src));
 
     } else if (est_tableau_access(src, ntab, idx)) {
@@ -206,20 +216,29 @@ static void emettre_segment_donnees(FILE *f)
         SymInfo *s = &syms[i];
         const char *anom = nom_asm(s->nom);
 
-        if (s->taille > 0)
+        if (s->taille > 0) {
             EMIT("    %-20s DW %d DUP(?)  ; tableau", anom, s->taille);
-        else if (s->est_temp)
+        } else if (s->est_temp) {
             EMIT("    %-20s DW ?          ; temporaire", anom);
-        else if (strlen(s->val) > 0 && strcmp(s->val,"oui") != 0) {
-            /* Variable/constante initialisee */
+        } else if (strlen(s->val) > 0 && strcmp(s->val,"oui") != 0) {
+            /* Variable/constante initialisee.
+               FIX : les flottants sont stockes comme entiers (partie entiere)
+               car le 8086 en mode reel ne supporte pas les flottants natifs.
+               ex: 2.500000 => DW 2,  3.141590 => DW 3
+               Un commentaire indique la valeur flottante originale. */
             long v = (long)atof(s->val);
-            EMIT("    %-20s DW %ld", anom, v);
-        } else
+            if (est_flottant(s->val))
+                EMIT("    %-20s DW %ld   ; float tronque (val orig: %s)", anom, v, s->val);
+            else
+                EMIT("    %-20s DW %ld", anom, v);
+        } else {
             EMIT("    %-20s DW ?", anom);
+        }
     }
 
-    /* Tampon pour l'affichage (INT 21h attend '$' comme terminateur) */
-    EMIT("    _OUT_BUF             DB 10 DUP(?), '$'");
+    /* Tampon pour l'affichage (INT 21h attend '$' comme terminateur).
+       FIX : taille portee a 12 pour couvrir -32768 (6 chiffres + signe + marge). */
+    EMIT("    _OUT_BUF             DB 12 DUP(?), '$'");
     EMIT("");
     EMIT("DONNEE ENDS");
     EMIT("");
@@ -358,6 +377,8 @@ static void traduire_quadruplet(FILE *f, int idx, int *marque)
         const char *mnem = (strcmp(op,"+")==0) ? "ADD" : "SUB";
         charger_dans_reg(f, a, "AX");
         if (est_nombre(b))
+            /* FIX : cast en long pour truncature correcte des flottants
+               ex: 1.500000 => 1, 2.000000 => 2 */
             EMIT("    %s AX, %ld", mnem, (long)atof(b));
         else {
             charger_dans_reg(f, b, "BX");
@@ -373,7 +394,26 @@ static void traduire_quadruplet(FILE *f, int idx, int *marque)
     if (strcmp(op,"*")==0 || strcmp(op,"/")==0) {
         int est_div = (strcmp(op,"/") == 0);
         charger_dans_reg(f, a, "AX");
+
+        /* FIX Bug2 : multiplication par un flottant non entier (ex: 1.500000).
+           La troncature (long)atof("1.500000") = 1 donnait un resultat faux.
+           Cas n.5 : x * n.5  =>  x * (2n+1) puis SAR AX, 1  (division entiere par 2).
+           Ex: x * 1.5  =>  MOV BX, 3 ; IMUL BX ; SAR AX, 1
+               x * 2.5  =>  MOV BX, 5 ; IMUL BX ; SAR AX, 1                           */
+        if (!est_div && est_nombre(b) && est_flottant(b)) {
+            double fval = atof(b);
+            long   ival = (long)fval;
+            if (fval == ival + 0.5) {
+                EMIT("    MOV BX, %ld", 2 * ival + 1);
+                EMIT("    IMUL BX");
+                EMIT("    SAR AX, 1");
+                stocker_ax_dans(f, res);
+                return;
+            }
+        }
+
         if (est_nombre(b))
+            /* FIX : cast en long pour truncature correcte des flottants */
             EMIT("    MOV BX, %ld", (long)atof(b));
         else
             charger_dans_reg(f, b, "BX");
@@ -411,6 +451,7 @@ static void traduire_quadruplet(FILE *f, int idx, int *marque)
 
         charger_dans_reg(f, a, "AX");
         if (est_nombre(b))
+            /* FIX : cast en long pour truncature correcte des flottants */
             EMIT("    CMP AX, %ld", (long)atof(b));
         else {
             charger_dans_reg(f, b, "BX");
@@ -485,11 +526,37 @@ static void traduire_quadruplet(FILE *f, int idx, int *marque)
     /* ---- Affichage  out variable ou chaine ---- */
     if (strcmp(op, "out") == 0) {
         if (a && a[0] == '"') {
-            /* Chaine litterale : afficher caractere par caractere */
+            /* Chaine litterale : afficher caractere par caractere.
+               FIX : gestion de toutes les sequences d'echappement courantes
+               (\n, \t, \\, \") au lieu de \n seulement. */
             const char *p = a + 1;
             while (*p && *p != '"') {
-                if (*p == '\\' && *(p+1) == 'n') {
-                    emit_newline(f); p += 2; continue;
+                if (*p == '\\') {
+                    p++;
+                    switch (*p) {
+                        case 'n':   /* saut de ligne */
+                            emit_newline(f);
+                            break;
+                        case 't':   /* tabulation horizontale */
+                            EMIT("    MOV AH, 02h");
+                            EMIT("    MOV DL, 09h  ; tabulation");
+                            EMIT("    INT 21h");
+                            break;
+                        case '\\':  /* antislash litteral */
+                            EMIT("    MOV AH, 02h");
+                            EMIT("    MOV DL, 92   ; '\\'");
+                            EMIT("    INT 21h");
+                            break;
+                        case '"':   /* guillemet litteral */
+                            EMIT("    MOV AH, 02h");
+                            EMIT("    MOV DL, 34   ; '\"'");
+                            EMIT("    INT 21h");
+                            break;
+                        default:    /* sequence inconnue : ignorer */
+                            break;
+                    }
+                    p++;
+                    continue;
                 }
                 EMIT("    MOV AH, 02h");
                 EMIT("    MOV DL, %d   ; '%c'", (unsigned char)*p, *p);
@@ -501,7 +568,13 @@ static void traduire_quadruplet(FILE *f, int idx, int *marque)
             charger_dans_reg(f, a, "AX");
             EMIT("    CALL _PRINT_INT");
         }
-        emit_newline(f);
+        /* FIX Bug5 : une chaine litterale (ex: "Somme: ") est un libelle qui
+           precede la valeur sur la meme ligne => pas de saut de ligne apres.
+           Une variable ou un nombre est toujours l'element final => saut de ligne.
+           Cela traite correctement  out("label: ", x)  =>  "label: 42\n"
+           sans fusionner plusieurs instructions out() sur une seule ligne.    */
+        if (!(a && a[0] == '"'))
+            emit_newline(f);
         return;
     }
 

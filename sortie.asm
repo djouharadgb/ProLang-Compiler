@@ -8,33 +8,73 @@ PILE ENDS
 
 DONNEE SEGMENT
 
-    res                  DW ?
-    compteur             DW ?
+    moyenne              DW 0   ; float tronque (val orig: 0.000000)
+    somme                DW 0
+    z                    DW ?
+    y                    DW ?
     x                    DW ?
+    Max                  DW 100
+    Tabint               DW 50 DUP(?)  ; tableau
+    Pi                   DW 3   ; float tronque (val orig: 3.141590)
+    Tabfloat             DW 30 DUP(?)  ; tableau
     k                    DW ?
     j                    DW ?
     i                    DW ?
+    b                    DW ?
+    a                    DW ?
     _T0                  DW ?          ; temporaire
     _T1                  DW ?          ; temporaire
     _T2                  DW ?          ; temporaire
+    _T3                  DW ?          ; temporaire
+    _T4                  DW ?          ; temporaire
     _T5                  DW ?          ; temporaire
     _T6                  DW ?          ; temporaire
     _T7                  DW ?          ; temporaire
+    _T8                  DW ?          ; temporaire
+    _T9                  DW ?          ; temporaire
     _T10                 DW ?          ; temporaire
     _T11                 DW ?          ; temporaire
     _T12                 DW ?          ; temporaire
+    _T13                 DW ?          ; temporaire
+    _T14                 DW ?          ; temporaire
     _T15                 DW ?          ; temporaire
     _T16                 DW ?          ; temporaire
     _T17                 DW ?          ; temporaire
+    _T18                 DW ?          ; temporaire
+    _T19                 DW ?          ; temporaire
     _T20                 DW ?          ; temporaire
     _T21                 DW ?          ; temporaire
     _T22                 DW ?          ; temporaire
     _T23                 DW ?          ; temporaire
+    _T24                 DW ?          ; temporaire
+    _T25                 DW ?          ; temporaire
+    _T26                 DW ?          ; temporaire
     _T27                 DW ?          ; temporaire
     _T28                 DW ?          ; temporaire
     _T29                 DW ?          ; temporaire
     _T30                 DW ?          ; temporaire
-    _OUT_BUF             DB 10 DUP(?), '$'
+    _T31                 DW ?          ; temporaire
+    _T32                 DW ?          ; temporaire
+    _T33                 DW ?          ; temporaire
+    _T34                 DW ?          ; temporaire
+    _T35                 DW ?          ; temporaire
+    _T36                 DW ?          ; temporaire
+    _T37                 DW ?          ; temporaire
+    _T38                 DW ?          ; temporaire
+    _T39                 DW ?          ; temporaire
+    _T40                 DW ?          ; temporaire
+    _T41                 DW ?          ; temporaire
+    _T42                 DW ?          ; temporaire
+    _T43                 DW ?          ; temporaire
+    _T44                 DW ?          ; temporaire
+    _T45                 DW ?          ; temporaire
+    _T46                 DW ?          ; temporaire
+    _T47                 DW ?          ; temporaire
+    _T48                 DW ?          ; temporaire
+    _T49                 DW ?          ; temporaire
+    _T50                 DW ?          ; temporaire
+    _T51                 DW ?          ; temporaire
+    _OUT_BUF             DB 12 DUP(?), '$'
 
 DONNEE ENDS
 
@@ -128,1113 +168,547 @@ Debut:
     MOV SP, base_pile
 
 L0:
-    ; [0] (:=, 0, , res)
+    ; [0] (:=, 0, , somme)
     MOV AX, 0
-    MOV res, AX
+    MOV somme, AX
 
-    ; [1] (:=, 0, , i)
+    ; [1] (:=, 0.000000, , moyenne)
     MOV AX, 0
-    MOV i, AX
+    MOV moyenne, AX
 
-L2:
-    ; [2] (<=, i, 2, T0)
-    MOV AX, i
-    CMP AX, 2
-    JLE _CMP2_V
-    MOV _T0, 0
-    JMP _CMP2_S
-_CMP2_V:
-    MOV _T0, 1
-_CMP2_S:
+    ; [2] (:=, 10, , x)
+    MOV AX, 10
+    MOV x, AX
 
-    ; [3] (BZ, T0, , 11)
+    ; [3] (:=, 5, , y)
+    MOV AX, 5
+    MOV y, AX
+
+    ; [4] (:=, 2, , z)
+    MOV AX, 2
+    MOV z, AX
+
+    ; [5] (:=, 2.500000, , a)
+    MOV AX, 2
+    MOV a, AX
+
+    ; [6] (+, a, 3.141590, T0)
+    MOV AX, a
+    ADD AX, 3
+    MOV _T0, AX
+
+    ; [7] (+, T0, T0, T1)
     MOV AX, _T0
-    CMP AX, 0
-    JE  L11
+    MOV BX, _T0
+    ADD AX, BX
+    MOV _T1, AX
 
-    ; [4] (:=, 0, , j)
-    MOV AX, 0
-    MOV j, AX
-
-L5:
-    ; [5] (<=, j, 3, T1)
-    MOV AX, j
-    CMP AX, 3
-    JLE _CMP5_V
-    MOV _T1, 0
-    JMP _CMP5_S
-_CMP5_V:
-    MOV _T1, 1
-_CMP5_S:
-
-    ; [6] (BZ, T1, , 10)
+    ; [8] (:=, T1, , b)
     MOV AX, _T1
-    CMP AX, 0
-    JE  L10
+    MOV b, AX
 
-    ; [7] (+, res, 1, T2)
-    MOV AX, res
-    ADD AX, 1
+    ; [9] (*, y, z, T2)
+    MOV AX, y
+    MOV BX, z
+    IMUL BX
     MOV _T2, AX
 
-    ; [8] (:=, T2, , res)
-    MOV AX, _T2
-    MOV res, AX
+    ; [10] (+, x, T2, T3)
+    MOV AX, x
+    MOV BX, _T2
+    ADD AX, BX
+    MOV _T3, AX
 
-    ; [9] (BR, , , 5)
-    JMP L5
+    ; [11] (:=, T3, , Tabint[0])
+    MOV AX, _T3
+    MOV SI, 0
+    MOV Tabint[SI], AX
 
-L10:
-    ; [10] (BR, , , 2)
-    JMP L2
+    ; [12] (+, b, 3.500000, T4)
+    MOV AX, b
+    ADD AX, 3
+    MOV _T4, AX
 
-L11:
-    ; [11] (out, "CAS1 - for dans for, res attendu 12: ", , )
-    MOV AH, 02h
-    MOV DL, 67   ; 'C'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 65   ; 'A'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 83   ; 'S'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 49   ; '1'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 45   ; '-'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 102   ; 'f'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 111   ; 'o'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 114   ; 'r'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 100   ; 'd'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 97   ; 'a'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 110   ; 'n'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 115   ; 's'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 102   ; 'f'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 111   ; 'o'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 114   ; 'r'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 44   ; ','
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 114   ; 'r'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 101   ; 'e'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 115   ; 's'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 97   ; 'a'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 116   ; 't'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 116   ; 't'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 101   ; 'e'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 110   ; 'n'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 100   ; 'd'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 117   ; 'u'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 49   ; '1'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 50   ; '2'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 58   ; ':'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 0Ah
-    INT 21h
+    ; [13] (/, T4, 2.000000, T5)
+    MOV AX, _T4
+    MOV BX, 2
+    CWD            ; etendre AX -> DX:AX
+    IDIV BX
+    MOV _T5, AX
 
-    ; [12] (out, res, , )
-    MOV AX, res
-    CALL _PRINT_INT
-    MOV AH, 02h
-    MOV DL, 0Ah
-    INT 21h
+    ; [14] (:=, T5, , Tabfloat[1])
+    MOV AX, _T5
+    MOV SI, 2
+    MOV Tabfloat[SI], AX
 
-    ; [13] (:=, 0, , res)
-    MOV AX, 0
-    MOV res, AX
-
-    ; [14] (:=, 0, , i)
-    MOV AX, 0
-    MOV i, AX
-
-L15:
-    ; [15] (<, i, 3, T5)
-    MOV AX, i
-    CMP AX, 3
-    JL _CMP15_V
-    MOV _T5, 0
+    ; [15] (>, x, y, T6)
+    MOV AX, x
+    MOV BX, y
+    CMP AX, BX
+    JG _CMP15_V
+    MOV _T6, 0
     JMP _CMP15_S
 _CMP15_V:
-    MOV _T5, 1
+    MOV _T6, 1
 _CMP15_S:
 
-    ; [16] (BZ, T5, , 24)
-    MOV AX, _T5
-    CMP AX, 0
-    JE  L24
-
-    ; [17] (:=, 0, , j)
-    MOV AX, 0
-    MOV j, AX
-
-L18:
-    ; [18] (<=, j, 4, T6)
-    MOV AX, j
-    CMP AX, 4
-    JLE _CMP18_V
-    MOV _T6, 0
-    JMP _CMP18_S
-_CMP18_V:
-    MOV _T6, 1
-_CMP18_S:
-
-    ; [19] (BZ, T6, , 23)
-    MOV AX, _T6
-    CMP AX, 0
-    JE  L23
-
-    ; [20] (+, res, 1, T7)
-    MOV AX, res
-    ADD AX, 1
+    ; [16] (+, x, y, T7)
+    MOV AX, x
+    MOV BX, y
+    ADD AX, BX
     MOV _T7, AX
 
-    ; [21] (:=, T7, , res)
-    MOV AX, _T7
-    MOV res, AX
+    ; [17] (<, z, T7, T8)
+    MOV AX, z
+    MOV BX, _T7
+    CMP AX, BX
+    JL _CMP17_V
+    MOV _T8, 0
+    JMP _CMP17_S
+_CMP17_V:
+    MOV _T8, 1
+_CMP17_S:
 
-    ; [22] (BR, , , 18)
-    JMP L18
+    ; [18] (AND, T6, T8, T9)
+    MOV AX, _T6
+    MOV BX, _T8
+    AND AX, BX
+    MOV _T9, AX
 
-L23:
-    ; [23] (BR, , , 15)
-    JMP L15
-
-L24:
-    ; [24] (out, "CAS2 - for dans while, res attendu 15: ", , )
-    MOV AH, 02h
-    MOV DL, 67   ; 'C'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 65   ; 'A'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 83   ; 'S'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 50   ; '2'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 45   ; '-'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 102   ; 'f'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 111   ; 'o'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 114   ; 'r'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 100   ; 'd'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 97   ; 'a'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 110   ; 'n'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 115   ; 's'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 119   ; 'w'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 104   ; 'h'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 105   ; 'i'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 108   ; 'l'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 101   ; 'e'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 44   ; ','
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 114   ; 'r'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 101   ; 'e'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 115   ; 's'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 97   ; 'a'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 116   ; 't'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 116   ; 't'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 101   ; 'e'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 110   ; 'n'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 100   ; 'd'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 117   ; 'u'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 49   ; '1'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 53   ; '5'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 58   ; ':'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 0Ah
-    INT 21h
-
-    ; [25] (out, res, , )
-    MOV AX, res
-    CALL _PRINT_INT
-    MOV AH, 02h
-    MOV DL, 0Ah
-    INT 21h
-
-    ; [26] (:=, 0, , res)
-    MOV AX, 0
-    MOV res, AX
-
-    ; [27] (:=, 0, , i)
-    MOV AX, 0
-    MOV i, AX
-
-L28:
-    ; [28] (<=, i, 2, T10)
-    MOV AX, i
-    CMP AX, 2
-    JLE _CMP28_V
+    ; [19] (==, y, 0, T10)
+    MOV AX, y
+    CMP AX, 0
+    JE _CMP19_V
     MOV _T10, 0
-    JMP _CMP28_S
-_CMP28_V:
+    JMP _CMP19_S
+_CMP19_V:
     MOV _T10, 1
-_CMP28_S:
+_CMP19_S:
 
-    ; [29] (BZ, T10, , 37)
+    ; [20] (NON, T10, , T11)
     MOV AX, _T10
     CMP AX, 0
-    JE  L37
-
-    ; [30] (:=, 0, , j)
+    JE  _NON20_U
     MOV AX, 0
-    MOV j, AX
+    JMP _NON20_F
+_NON20_U:
+    MOV AX, 1
+_NON20_F:
+    MOV _T11, AX
 
-L31:
-    ; [31] (<, j, 4, T11)
-    MOV AX, j
-    CMP AX, 4
-    JL _CMP31_V
-    MOV _T11, 0
-    JMP _CMP31_S
-_CMP31_V:
-    MOV _T11, 1
-_CMP31_S:
-
-    ; [32] (BZ, T11, , 36)
-    MOV AX, _T11
-    CMP AX, 0
-    JE  L36
-
-    ; [33] (+, res, 1, T12)
-    MOV AX, res
-    ADD AX, 1
+    ; [21] (OR, T9, T11, T12)
+    MOV AX, _T9
+    MOV BX, _T11
+    OR AX, BX
     MOV _T12, AX
 
-    ; [34] (:=, T12, , res)
+    ; [22] (BZ, T12, , 48)
     MOV AX, _T12
-    MOV res, AX
+    CMP AX, 0
+    JE  L48
 
-    ; [35] (BR, , , 31)
-    JMP L31
+    ; [23] (+, x, y, T13)
+    MOV AX, x
+    MOV BX, y
+    ADD AX, BX
+    MOV _T13, AX
 
-L36:
-    ; [36] (BR, , , 28)
-    JMP L28
+    ; [24] (+, T13, z, T14)
+    MOV AX, _T13
+    MOV BX, z
+    ADD AX, BX
+    MOV _T14, AX
 
-L37:
-    ; [37] (out, "CAS3 - while dans for, res attendu 12: ", , )
-    MOV AH, 02h
-    MOV DL, 67   ; 'C'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 65   ; 'A'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 83   ; 'S'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 51   ; '3'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 45   ; '-'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 119   ; 'w'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 104   ; 'h'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 105   ; 'i'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 108   ; 'l'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 101   ; 'e'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 100   ; 'd'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 97   ; 'a'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 110   ; 'n'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 115   ; 's'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 102   ; 'f'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 111   ; 'o'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 114   ; 'r'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 44   ; ','
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 114   ; 'r'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 101   ; 'e'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 115   ; 's'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 97   ; 'a'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 116   ; 't'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 116   ; 't'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 101   ; 'e'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 110   ; 'n'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 100   ; 'd'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 117   ; 'u'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 49   ; '1'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 50   ; '2'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 58   ; ':'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 0Ah
-    INT 21h
+    ; [25] (:=, T14, , somme)
+    MOV AX, _T14
+    MOV somme, AX
 
-    ; [38] (out, res, , )
-    MOV AX, res
-    CALL _PRINT_INT
-    MOV AH, 02h
-    MOV DL, 0Ah
-    INT 21h
-
-    ; [39] (:=, 0, , res)
-    MOV AX, 0
-    MOV res, AX
-
-    ; [40] (:=, 0, , i)
+    ; [26] (:=, 0, , i)
     MOV AX, 0
     MOV i, AX
 
-L41:
-    ; [41] (<, i, 3, T15)
+L27:
+    ; [27] (<=, i, 10, T15)
     MOV AX, i
-    CMP AX, 3
-    JL _CMP41_V
+    CMP AX, 10
+    JLE _CMP27_V
     MOV _T15, 0
-    JMP _CMP41_S
-_CMP41_V:
+    JMP _CMP27_S
+_CMP27_V:
     MOV _T15, 1
-_CMP41_S:
+_CMP27_S:
 
-    ; [42] (BZ, T15, , 50)
+    ; [28] (BZ, T15, , 47)
     MOV AX, _T15
     CMP AX, 0
-    JE  L50
+    JE  L47
 
-    ; [43] (:=, 0, , j)
-    MOV AX, 0
-    MOV j, AX
+    ; [29] (TAB, Tabint, i, T16)
+    MOV SI, i
+    ADD SI, SI
+    MOV AX, Tabint[SI]
+    MOV _T16, AX
 
-L44:
-    ; [44] (<, j, 3, T16)
-    MOV AX, j
-    CMP AX, 3
-    JL _CMP44_V
-    MOV _T16, 0
-    JMP _CMP44_S
-_CMP44_V:
-    MOV _T16, 1
-_CMP44_S:
-
-    ; [45] (BZ, T16, , 49)
+    ; [30] (+, T16, i, T17)
     MOV AX, _T16
-    CMP AX, 0
-    JE  L49
-
-    ; [46] (+, res, 1, T17)
-    MOV AX, res
-    ADD AX, 1
+    MOV BX, i
+    ADD AX, BX
     MOV _T17, AX
 
-    ; [47] (:=, T17, , res)
+    ; [31] (:=, T17, , Tabint[i])
     MOV AX, _T17
-    MOV res, AX
+    MOV SI, i
+    ADD SI, SI
+    MOV Tabint[SI], AX
 
-    ; [48] (BR, , , 44)
-    JMP L44
-
-L49:
-    ; [49] (BR, , , 41)
-    JMP L41
-
-L50:
-    ; [50] (out, "CAS4 - while dans while, res attendu 9: ", , )
-    MOV AH, 02h
-    MOV DL, 67   ; 'C'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 65   ; 'A'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 83   ; 'S'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 52   ; '4'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 45   ; '-'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 119   ; 'w'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 104   ; 'h'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 105   ; 'i'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 108   ; 'l'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 101   ; 'e'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 100   ; 'd'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 97   ; 'a'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 110   ; 'n'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 115   ; 's'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 119   ; 'w'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 104   ; 'h'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 105   ; 'i'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 108   ; 'l'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 101   ; 'e'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 44   ; ','
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 114   ; 'r'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 101   ; 'e'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 115   ; 's'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 97   ; 'a'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 116   ; 't'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 116   ; 't'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 101   ; 'e'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 110   ; 'n'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 100   ; 'd'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 117   ; 'u'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 57   ; '9'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 58   ; ':'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 0Ah
-    INT 21h
-
-    ; [51] (out, res, , )
-    MOV AX, res
-    CALL _PRINT_INT
-    MOV AH, 02h
-    MOV DL, 0Ah
-    INT 21h
-
-    ; [52] (:=, 0, , res)
-    MOV AX, 0
-    MOV res, AX
-
-    ; [53] (:=, 0, , i)
-    MOV AX, 0
-    MOV i, AX
-
-L54:
-    ; [54] (<=, i, 2, T20)
+    ; [32] (<, i, 5, T18)
     MOV AX, i
-    CMP AX, 2
-    JLE _CMP54_V
+    CMP AX, 5
+    JL _CMP32_V
+    MOV _T18, 0
+    JMP _CMP32_S
+_CMP32_V:
+    MOV _T18, 1
+_CMP32_S:
+
+    ; [33] (TAB, Tabint, i, T19)
+    MOV SI, i
+    ADD SI, SI
+    MOV AX, Tabint[SI]
+    MOV _T19, AX
+
+    ; [34] (>, T19, 10, T20)
+    MOV AX, _T19
+    CMP AX, 10
+    JG _CMP34_V
     MOV _T20, 0
-    JMP _CMP54_S
-_CMP54_V:
+    JMP _CMP34_S
+_CMP34_V:
     MOV _T20, 1
-_CMP54_S:
+_CMP34_S:
 
-    ; [55] (BZ, T20, , 67)
-    MOV AX, _T20
-    CMP AX, 0
-    JE  L67
+    ; [35] (AND, T18, T20, T21)
+    MOV AX, _T18
+    MOV BX, _T20
+    AND AX, BX
+    MOV _T21, AX
 
-    ; [56] (:=, 0, , j)
-    MOV AX, 0
-    MOV j, AX
-
-L57:
-    ; [57] (<=, j, 2, T21)
-    MOV AX, j
-    CMP AX, 2
-    JLE _CMP57_V
-    MOV _T21, 0
-    JMP _CMP57_S
-_CMP57_V:
-    MOV _T21, 1
-_CMP57_S:
-
-    ; [58] (BZ, T21, , 66)
+    ; [36] (BZ, T21, , 41)
     MOV AX, _T21
     CMP AX, 0
-    JE  L66
+    JE  L41
 
-    ; [59] (:=, 0, , k)
-    MOV AX, 0
-    MOV k, AX
+    ; [37] (TAB, Tabint, i, T22)
+    MOV SI, i
+    ADD SI, SI
+    MOV AX, Tabint[SI]
+    MOV _T22, AX
 
-L60:
-    ; [60] (<=, k, 2, T22)
-    MOV AX, k
-    CMP AX, 2
-    JLE _CMP60_V
-    MOV _T22, 0
-    JMP _CMP60_S
-_CMP60_V:
-    MOV _T22, 1
-_CMP60_S:
-
-    ; [61] (BZ, T22, , 65)
+    ; [38] (*, T22, 1.500000, T23)
     MOV AX, _T22
-    CMP AX, 0
-    JE  L65
-
-    ; [62] (+, res, 1, T23)
-    MOV AX, res
-    ADD AX, 1
+    MOV BX, 3
+    IMUL BX
+    SAR AX, 1
     MOV _T23, AX
 
-    ; [63] (:=, T23, , res)
+    ; [39] (:=, T23, , Tabfloat[i])
     MOV AX, _T23
-    MOV res, AX
+    MOV SI, i
+    ADD SI, SI
+    MOV Tabfloat[SI], AX
 
-    ; [64] (BR, , , 60)
-    JMP L60
+    ; [40] (BR, , , 44)
+    JMP L44
 
-L65:
-    ; [65] (BR, , , 57)
-    JMP L57
+L41:
+    ; [41] (TAB, Tabint, i, T24)
+    MOV SI, i
+    ADD SI, SI
+    MOV AX, Tabint[SI]
+    MOV _T24, AX
 
-L66:
-    ; [66] (BR, , , 54)
-    JMP L54
+    ; [42] (/, T24, 2.000000, T25)
+    MOV AX, _T24
+    MOV BX, 2
+    CWD            ; etendre AX -> DX:AX
+    IDIV BX
+    MOV _T25, AX
 
-L67:
-    ; [67] (out, "CAS5 - for dans for dans for, res attendu 27: ", , )
-    MOV AH, 02h
-    MOV DL, 67   ; 'C'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 65   ; 'A'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 83   ; 'S'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 53   ; '5'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 45   ; '-'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 102   ; 'f'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 111   ; 'o'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 114   ; 'r'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 100   ; 'd'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 97   ; 'a'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 110   ; 'n'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 115   ; 's'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 102   ; 'f'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 111   ; 'o'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 114   ; 'r'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 100   ; 'd'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 97   ; 'a'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 110   ; 'n'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 115   ; 's'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 102   ; 'f'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 111   ; 'o'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 114   ; 'r'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 44   ; ','
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 114   ; 'r'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 101   ; 'e'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 115   ; 's'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 97   ; 'a'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 116   ; 't'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 116   ; 't'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 101   ; 'e'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 110   ; 'n'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 100   ; 'd'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 117   ; 'u'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 50   ; '2'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 55   ; '7'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 58   ; ':'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 0Ah
-    INT 21h
+    ; [43] (:=, T25, , Tabfloat[i])
+    MOV AX, _T25
+    MOV SI, i
+    ADD SI, SI
+    MOV Tabfloat[SI], AX
 
-    ; [68] (out, res, , )
-    MOV AX, res
-    CALL _PRINT_INT
-    MOV AH, 02h
-    MOV DL, 0Ah
-    INT 21h
+L44:
+    ; [44] (+, i, 1, T26)
+    MOV AX, i
+    ADD AX, 1
+    MOV _T26, AX
 
-    ; [69] (:=, 0, , res)
-    MOV AX, 0
-    MOV res, AX
-
-    ; [70] (:=, 0, , compteur)
-    MOV AX, 0
-    MOV compteur, AX
-
-L71:
-    ; [71] (<, compteur, 2, T27)
-    MOV AX, compteur
-    CMP AX, 2
-    JL _CMP71_V
-    MOV _T27, 0
-    JMP _CMP71_S
-_CMP71_V:
-    MOV _T27, 1
-_CMP71_S:
-
-    ; [72] (BZ, T27, , 84)
-    MOV AX, _T27
-    CMP AX, 0
-    JE  L84
-
-    ; [73] (:=, 0, , i)
-    MOV AX, 0
+    ; [45] (:=, T26, , i)
+    MOV AX, _T26
     MOV i, AX
 
-L74:
-    ; [74] (<=, i, 2, T28)
-    MOV AX, i
-    CMP AX, 2
-    JLE _CMP74_V
-    MOV _T28, 0
-    JMP _CMP74_S
-_CMP74_V:
-    MOV _T28, 1
-_CMP74_S:
+    ; [46] (BR, , , 27)
+    JMP L27
 
-    ; [75] (BZ, T28, , 83)
-    MOV AX, _T28
-    CMP AX, 0
-    JE  L83
+L47:
+    ; [47] (BR, , , 49)
+    JMP L49
 
-    ; [76] (:=, 0, , j)
+L48:
+    ; [48] (:=, 0, , somme)
     MOV AX, 0
-    MOV j, AX
+    MOV somme, AX
 
-L77:
-    ; [77] (<, j, 3, T29)
-    MOV AX, j
-    CMP AX, 3
-    JL _CMP77_V
-    MOV _T29, 0
-    JMP _CMP77_S
-_CMP77_V:
-    MOV _T29, 1
-_CMP77_S:
+L49:
+    ; [49] (<=, x, 100, T27)
+    MOV AX, x
+    CMP AX, 100
+    JLE _CMP49_V
+    MOV _T27, 0
+    JMP _CMP49_S
+_CMP49_V:
+    MOV _T27, 1
+_CMP49_S:
 
-    ; [78] (BZ, T29, , 82)
-    MOV AX, _T29
+    ; [50] (!=, y, 0, T28)
+    MOV AX, y
     CMP AX, 0
-    JE  L82
+    JNE _CMP50_V
+    MOV _T28, 0
+    JMP _CMP50_S
+_CMP50_V:
+    MOV _T28, 1
+_CMP50_S:
 
-    ; [79] (+, res, 1, T30)
-    MOV AX, res
-    ADD AX, 1
+    ; [51] (<, z, 10, T29)
+    MOV AX, z
+    CMP AX, 10
+    JL _CMP51_V
+    MOV _T29, 0
+    JMP _CMP51_S
+_CMP51_V:
+    MOV _T29, 1
+_CMP51_S:
+
+    ; [52] (OR, T28, T29, T30)
+    MOV AX, _T28
+    MOV BX, _T29
+    OR AX, BX
     MOV _T30, AX
 
-    ; [80] (:=, T30, , res)
-    MOV AX, _T30
-    MOV res, AX
+    ; [53] (AND, T27, T30, T31)
+    MOV AX, _T27
+    MOV BX, _T30
+    AND AX, BX
+    MOV _T31, AX
 
-    ; [81] (BR, , , 77)
-    JMP L77
+    ; [54] (BZ, T31, , 71)
+    MOV AX, _T31
+    CMP AX, 0
+    JE  L71
 
-L82:
-    ; [82] (BR, , , 74)
-    JMP L74
+    ; [55] (+, x, 1, T32)
+    MOV AX, x
+    ADD AX, 1
+    MOV _T32, AX
 
-L83:
-    ; [83] (BR, , , 71)
-    JMP L71
+    ; [56] (:=, T32, , x)
+    MOV AX, _T32
+    MOV x, AX
 
-L84:
-    ; [84] (out, "CAS6 - while dans for dans while, res attendu 18: ", , )
+L57:
+    ; [57] (==, x, y, T33)
+    MOV AX, x
+    MOV BX, y
+    CMP AX, BX
+    JE _CMP57_V
+    MOV _T33, 0
+    JMP _CMP57_S
+_CMP57_V:
+    MOV _T33, 1
+_CMP57_S:
+
+    ; [58] (NON, T33, , T34)
+    MOV AX, _T33
+    CMP AX, 0
+    JE  _NON58_U
+    MOV AX, 0
+    JMP _NON58_F
+_NON58_U:
+    MOV AX, 1
+_NON58_F:
+    MOV _T34, AX
+
+    ; [59] (BZ, T34, , 70)
+    MOV AX, _T34
+    CMP AX, 0
+    JE  L70
+
+    ; [60] (+, y, 1, T35)
+    MOV AX, y
+    ADD AX, 1
+    MOV _T35, AX
+
+    ; [61] (:=, T35, , y)
+    MOV AX, _T35
+    MOV y, AX
+
+    ; [62] (+, x, 1, T36)
+    MOV AX, x
+    ADD AX, 1
+    MOV _T36, AX
+
+    ; [63] (TAB, Tabint, 0, T37)
+    MOV SI, 0
+    MOV AX, Tabint[SI]
+    MOV _T37, AX
+
+    ; [64] (TAB, Tabint, 1, T38)
+    MOV SI, 2
+    MOV AX, Tabint[SI]
+    MOV _T38, AX
+
+    ; [65] (+, T37, T38, T39)
+    MOV AX, _T37
+    MOV BX, _T38
+    ADD AX, BX
+    MOV _T39, AX
+
+    ; [66] (-, x, y, T40)
+    MOV AX, x
+    MOV BX, y
+    SUB AX, BX
+    MOV _T40, AX
+
+    ; [67] (*, T39, T40, T41)
+    MOV AX, _T39
+    MOV BX, _T40
+    IMUL BX
+    MOV _T41, AX
+
+    ; [68] (:=, T41, , Tabint[T36])
+    MOV AX, _T41
+    MOV SI, _T36
+    ADD SI, SI
+    MOV Tabint[SI], AX
+
+    ; [69] (BR, , , 57)
+    JMP L57
+
+L70:
+    ; [70] (BR, , , 49)
+    JMP L49
+
+L71:
+    ; [71] (:=, 1, , j)
+    MOV AX, 1
+    MOV j, AX
+
+L72:
+    ; [72] (<=, j, 20, T42)
+    MOV AX, j
+    CMP AX, 20
+    JLE _CMP72_V
+    MOV _T42, 0
+    JMP _CMP72_S
+_CMP72_V:
+    MOV _T42, 1
+_CMP72_S:
+
+    ; [73] (BZ, T42, , 86)
+    MOV AX, _T42
+    CMP AX, 0
+    JE  L86
+
+    ; [74] (-, j, 1, T43)
+    MOV AX, j
+    SUB AX, 1
+    MOV _T43, AX
+
+    ; [75] (TAB, Tabfloat, T43, T44)
+    MOV SI, _T43
+    ADD SI, SI
+    MOV AX, Tabfloat[SI]
+    MOV _T44, AX
+
+    ; [76] (TAB, Tabfloat, j, T45)
+    MOV SI, j
+    ADD SI, SI
+    MOV AX, Tabfloat[SI]
+    MOV _T45, AX
+
+    ; [77] (+, T44, T45, T46)
+    MOV AX, _T44
+    MOV BX, _T45
+    ADD AX, BX
+    MOV _T46, AX
+
+    ; [78] (/, T46, 2.000000, T47)
+    MOV AX, _T46
+    MOV BX, 2
+    CWD            ; etendre AX -> DX:AX
+    IDIV BX
+    MOV _T47, AX
+
+    ; [79] (:=, T47, , Tabfloat[j])
+    MOV AX, _T47
+    MOV SI, j
+    ADD SI, SI
+    MOV Tabfloat[SI], AX
+
+    ; [80] (TAB, Tabfloat, j, T48)
+    MOV SI, j
+    ADD SI, SI
+    MOV AX, Tabfloat[SI]
+    MOV _T48, AX
+
+    ; [81] (+, moyenne, T48, T49)
+    MOV AX, moyenne
+    MOV BX, _T48
+    ADD AX, BX
+    MOV _T49, AX
+
+    ; [82] (:=, T49, , moyenne)
+    MOV AX, _T49
+    MOV moyenne, AX
+
+    ; [83] (+, j, 1, T50)
+    MOV AX, j
+    ADD AX, 1
+    MOV _T50, AX
+
+    ; [84] (:=, T50, , j)
+    MOV AX, _T50
+    MOV j, AX
+
+    ; [85] (BR, , , 72)
+    JMP L72
+
+L86:
+    ; [86] (/, moyenne, 20.000000, T51)
+    MOV AX, moyenne
+    MOV BX, 20
+    CWD            ; etendre AX -> DX:AX
+    IDIV BX
+    MOV _T51, AX
+
+    ; [87] (:=, T51, , moyenne)
+    MOV AX, _T51
+    MOV moyenne, AX
+
+    ; [88] (input, , , x)
+    CALL _READ_INT   ; resultat dans AX
+    MOV x, AX
+
+    ; [89] (out, "Valeur finale de x: ", , )
     MOV AH, 02h
-    MOV DL, 67   ; 'C'
+    MOV DL, 86   ; 'V'
     INT 21h
     MOV AH, 02h
-    MOV DL, 65   ; 'A'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 83   ; 'S'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 54   ; '6'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 45   ; '-'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 119   ; 'w'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 104   ; 'h'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 105   ; 'i'
+    MOV DL, 97   ; 'a'
     INT 21h
     MOV AH, 02h
     MOV DL, 108   ; 'l'
@@ -1243,19 +717,10 @@ L84:
     MOV DL, 101   ; 'e'
     INT 21h
     MOV AH, 02h
-    MOV DL, 32   ; ' '
+    MOV DL, 117   ; 'u'
     INT 21h
     MOV AH, 02h
-    MOV DL, 100   ; 'd'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 97   ; 'a'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 110   ; 'n'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 115   ; 's'
+    MOV DL, 114   ; 'r'
     INT 21h
     MOV AH, 02h
     MOV DL, 32   ; ' '
@@ -1264,37 +729,13 @@ L84:
     MOV DL, 102   ; 'f'
     INT 21h
     MOV AH, 02h
-    MOV DL, 111   ; 'o'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 114   ; 'r'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 100   ; 'd'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 97   ; 'a'
+    MOV DL, 105   ; 'i'
     INT 21h
     MOV AH, 02h
     MOV DL, 110   ; 'n'
     INT 21h
     MOV AH, 02h
-    MOV DL, 115   ; 's'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 119   ; 'w'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 104   ; 'h'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 105   ; 'i'
+    MOV DL, 97   ; 'a'
     INT 21h
     MOV AH, 02h
     MOV DL, 108   ; 'l'
@@ -1303,31 +744,73 @@ L84:
     MOV DL, 101   ; 'e'
     INT 21h
     MOV AH, 02h
-    MOV DL, 44   ; ','
-    INT 21h
-    MOV AH, 02h
     MOV DL, 32   ; ' '
     INT 21h
     MOV AH, 02h
-    MOV DL, 114   ; 'r'
+    MOV DL, 100   ; 'd'
     INT 21h
     MOV AH, 02h
     MOV DL, 101   ; 'e'
     INT 21h
     MOV AH, 02h
-    MOV DL, 115   ; 's'
+    MOV DL, 32   ; ' '
+    INT 21h
+    MOV AH, 02h
+    MOV DL, 120   ; 'x'
+    INT 21h
+    MOV AH, 02h
+    MOV DL, 58   ; ':'
     INT 21h
     MOV AH, 02h
     MOV DL, 32   ; ' '
     INT 21h
+
+    ; [90] (out, x, , )
+    MOV AX, x
+    CALL _PRINT_INT
     MOV AH, 02h
-    MOV DL, 97   ; 'a'
+    MOV DL, 0Ah
+    INT 21h
+
+    ; [91] (out, "Somme: ", , )
+    MOV AH, 02h
+    MOV DL, 83   ; 'S'
     INT 21h
     MOV AH, 02h
-    MOV DL, 116   ; 't'
+    MOV DL, 111   ; 'o'
     INT 21h
     MOV AH, 02h
-    MOV DL, 116   ; 't'
+    MOV DL, 109   ; 'm'
+    INT 21h
+    MOV AH, 02h
+    MOV DL, 109   ; 'm'
+    INT 21h
+    MOV AH, 02h
+    MOV DL, 101   ; 'e'
+    INT 21h
+    MOV AH, 02h
+    MOV DL, 58   ; ':'
+    INT 21h
+    MOV AH, 02h
+    MOV DL, 32   ; ' '
+    INT 21h
+
+    ; [92] (out, somme, , )
+    MOV AX, somme
+    CALL _PRINT_INT
+    MOV AH, 02h
+    MOV DL, 0Ah
+    INT 21h
+
+    ; [93] (out, "Moyenne: ", , )
+    MOV AH, 02h
+    MOV DL, 77   ; 'M'
+    INT 21h
+    MOV AH, 02h
+    MOV DL, 111   ; 'o'
+    INT 21h
+    MOV AH, 02h
+    MOV DL, 121   ; 'y'
     INT 21h
     MOV AH, 02h
     MOV DL, 101   ; 'e'
@@ -1336,19 +819,10 @@ L84:
     MOV DL, 110   ; 'n'
     INT 21h
     MOV AH, 02h
-    MOV DL, 100   ; 'd'
+    MOV DL, 110   ; 'n'
     INT 21h
     MOV AH, 02h
-    MOV DL, 117   ; 'u'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 32   ; ' '
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 49   ; '1'
-    INT 21h
-    MOV AH, 02h
-    MOV DL, 56   ; '8'
+    MOV DL, 101   ; 'e'
     INT 21h
     MOV AH, 02h
     MOV DL, 58   ; ':'
@@ -1356,18 +830,15 @@ L84:
     MOV AH, 02h
     MOV DL, 32   ; ' '
     INT 21h
-    MOV AH, 02h
-    MOV DL, 0Ah
-    INT 21h
 
-    ; [85] (out, res, , )
-    MOV AX, res
+    ; [94] (out, moyenne, , )
+    MOV AX, moyenne
     CALL _PRINT_INT
     MOV AH, 02h
     MOV DL, 0Ah
     INT 21h
 
-L86:
+L95:
     MOV AH, 4Ch
     INT 21h
 
