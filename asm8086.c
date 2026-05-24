@@ -68,9 +68,7 @@ static void emit_newline(FILE *f)
     EMIT("    INT 21h");
 }
 
-/* =========================================================
-   CHARGEMENT ET STOCKAGE (AX / BX)
-   ========================================================= */
+/* CHARGEMENT ET STOCKAGE (AX / BX) */
 
 /*
  charger_dans_reg : place la valeur de 'src' dans le registre 'reg' (AX ou BX).

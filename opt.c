@@ -168,18 +168,16 @@ static const char *nom_base_tableau(const char *res, char *buf)
 }
 
 
-/* =========================================================================
+/* 
    PASSE 1 : PROPAGATION DE CONSTANTES SYMBOLIQUES
 
    Principe : si une variable est declaree CONST dans la table des symboles,
    remplacer toutes ses occurrences en operande par sa valeur numerique.
-   Cela permet aux passes suivantes (simplification algebrique, etc.)
-   de travailler directement sur des litteraux.
 
    Exemple :
      const MAX := 100
      t1 = i <= MAX   =>  t1 = i <= 100
-   ========================================================================= */
+*/
 static int propagation_constantes_symboliques(void)
 {
     int modifie = 0, i;
@@ -200,7 +198,7 @@ static int propagation_constantes_symboliques(void)
 }
 
 
-/* =========================================================================
+/*
    PASSE 2 : SIMPLIFICATION ALGEBRIQUE
 
    Principe : remplacer des operations couteuses ou sans effet
@@ -217,12 +215,7 @@ static int propagation_constantes_symboliques(void)
      X / 1              =>  X
      X / X              =>  1
      C1 op C2 (deux constantes) => resultat calcule a la compilation (folding)
-
-   CORRECTION BUG "2*X" :
-     L'ancienne version faisait  strcpy(a, b); strcpy(b, a);
-     ce qui ecrasait a avant de le copier dans b => b=b=X au lieu de b=X_original.
-     On utilise maintenant un tampon intermediaire pour sauvegarder X.
-   ========================================================================= */
+*/
 static int simplification_algebrique(void)
 {
     int modifie = 0, i;
@@ -312,7 +305,7 @@ static int simplification_algebrique(void)
 }
 
 
-/* =========================================================================
+/*
    PASSE 3 : SIMPLIFICATION DES CONSTANTES CHAINEES
 
    Principe : si deux quadruplets consecutifs effectuent chacun
@@ -326,24 +319,9 @@ static int simplification_algebrique(void)
    => quad[j] : R  = X  +/-  (C1 op C2)   (calcul net a la compilation)
       quad[i] : NOP                         (supprime)
 
-   Exemples :
+   Exemples : on fusuionne
      t10 = j + 1
-     t11 = t10 - 1   =>  t11 = j        (1-1 = 0, affectation directe)
-
-     t10 = j + 3
-     t11 = t10 + 5   =>  t11 = j + 8   (3+5 = 8)
-
-     t10 = j + 7
-     t11 = t10 - 2   =>  t11 = j + 5   (7-2 = +5)
-
-     t10 = j - 3
-     t11 = t10 + 8   =>  t11 = j + 5   (8-3 = +5)
-
-   FIX : on verifie aussi est_utilise_comme_index(res1) pour ne pas
-   fusionner un temporaire qui apparait comme indice tableau dans un
-   champ res (ex: Tabint[T36]) — cas non detecte par compter_utilisations
-   qui ne scanne que op1/op2.
-   ========================================================================= */
+     t11 = t10 - 1   =>  t11 = j        (1-1 = 0, affectation directe) */
 static int simplification_constantes_chainees(void)
 {
     int modifie = 0, i;
@@ -413,7 +391,7 @@ static int simplification_constantes_chainees(void)
 }
 
 
-/* =========================================================================
+/* 
    PASSE 4 : PROPAGATION DE COPIE
 
    Principe : lorsqu'un temporaire dst est affecte a partir d'une
@@ -422,22 +400,14 @@ static int simplification_constantes_chainees(void)
    Cela elimine les affectations intermediaires inutiles.
 
    Condition d'arret : la propagation s'arrete si :
-     - dst est redefini (sa valeur change)
-     - src est redefini (la copie n'est plus valide)
-     - un saut est rencontre (barriere de flot de controle)
+      dst est redefini (sa valeur change)
+      src est redefini (la copie n'est plus valide)
+      un saut est rencontre (barriere de flot de controle)
 
    Exemple :
      t1 = t2          => dst=t1, src=t2
      t3 = 4 * t1      => t3 = 4 * t2   (t1 remplace par t2)
-
-   CORRECTION BUG BOUCLES :
-     On ne propage QUE les temporaires (T0, T1, ...) en destination.
-     Propager une variable utilisateur (i, j, x...) est dangereux :
-       i := 1
-       T = i <= 10     => propagation naive donne T = 1 <= 10 = toujours vrai
-       i := i + 1      => i change, mais la condition est figee a 1 => boucle infinie
-     La garde "if (!est_temporaire(dst)) continue;" evite ce cas.
-   ========================================================================= */
+*/
 static int propagation_copie(void)
 {
     int modifie = 0, i;
@@ -468,26 +438,15 @@ static int propagation_copie(void)
 }
 
 
-/* =========================================================================
-   PASSE 5 : PROPAGATION D'EXPRESSION
-
-   Principe : si un temporaire T est defini par une affectation
-   simple (T := src) et n'est utilise qu'une seule fois dans
-   tout le code, on substitue directement src a la place de T
-   au point d'utilisation, puis on supprime le quadruplet
-   de definition (il devient NOP).
-
+/* PASSE 5 : PROPAGATION D'EXPRESSION
+kifkif mais cette fois ci avec une expression
    Condition : src ne doit pas avoir ete redefini entre la
    definition de T et son unique utilisation.
 
    Exemple :
      t1 = expr         =>  T utilise une seule fois
      t3 = 4 * t1       =>  t3 = 4 * expr  (t1 supprime)
-
-   FIX : on verifie aussi est_utilise_comme_index(res) pour ne pas
-   propager un temporaire qui sert d'indice tableau dans un champ res
-   (ex: Tabint[T36]) — cas invisible a compter_utilisations.
-   ========================================================================= */
+*/
 static int propagation_expression(void)
 {
     int modifie = 0, i;
@@ -532,13 +491,7 @@ static int propagation_expression(void)
 }
 
 
-/* =========================================================================
-   PASSE 6 : ELIMINATION DES EXPRESSIONS REDONDANTES (CSE)
-
-   Principe : maintenir une table des expressions deja calculees.
-   Si la meme expression apparait a nouveau et que ses operandes
-   n'ont pas ete modifies, remplacer le recalcul par une simple
-   copie du resultat precedent, evitant ainsi le recalcul inutile.
+/* PASSE 6 : ELIMINATION DES EXPRESSIONS REDONDANTES 
 
    Exemple :
      t1 = a + b        =>  memorisee dans la table
@@ -546,10 +499,7 @@ static int propagation_expression(void)
      t3 = a + b        =>  REDONDANT : remplace par t3 := t1
      t4 = t3 * e       =>  apres propagation : t4 = t1 * e
 
-   Commutativite : a+b et b+a sont considerees identiques pour + et *.
-   Un saut invalide toute la table car on ne sait plus quelles valeurs
-   sont encore valides apres le branchement.
-   ========================================================================= */
+   Commutativite : a+b et b+a sont considerees identiques pour + et *.  */
 #define MAX_EXPR_DISPO 256
 
 /* Structure representant une expression disponible dans la table */
@@ -647,47 +597,19 @@ static int elimination_expressions_redondantes(void)
 }
 
 
-/* =========================================================================
-   PASSE 7 : ELIMINATION DE VARIABLES MORTES — VERSION CORRIGEE
-
-   PROBLEME DE L'ANCIENNE VERSION :
-   L'analyse de vivacite en passe arriere LINEAIRE est incorrecte en
-   presence de boucles. Le schema suivant tue systematiquement les
-   increments de boucle :
-
-       [i := 0]               <- init
-       [T = i <= N]           <- scanne EN DERNIER dans le sens arriere
-       [BZ T -> exit]
-       ...corps...
-       [T2 = i + 1]
-       [i := T2]              <- scanne EN PREMIER ; i pas encore "vivant"
-       [BR -> cond]           =>  i est marque mort et SUPPRIME (BUG !)
-
-   SOLUTION CONSERVATRICE :
-   On ne supprime comme "mort" que les variables utilisateur qui ne sont
-   JAMAIS lues nulle part dans tout le programme (analyse globale simple).
-   On exclut toute variable qui apparait dans au moins un operande (op1/op2)
-   d'un quadruplet non-NOP. Pas de faux positifs, sans danger pour les boucles.
-
-   CORRECTION BUG TABLEAUX (FIX 1) :
-   Les affectations tableau ont la forme "Tabfloat[i]" en res, mais les
-   lectures (TAB) utilisent "Tabfloat" en op1. Sans extraction du nom de
-   base, strcmp("Tabfloat[i]", "Tabfloat") echoue et le tableau est
-   faussement supprime. On utilise nom_base_tableau() pour extraire "Tabfloat"
-   avant de tester si la variable est lue ailleurs.
-
-   Exemple de ce qu'on elimine (variable declaree mais jamais lue) :
-     Pi := 3.14        =>  Pi n'apparait jamais en op1/op2 => supprime
-   ========================================================================= */
+/*
+   PASSE 7 : ELIMINATION DE VARIABLES MORTES 
+on supprime var jamais utilisee
+ */
 static int elimination_variables_mortes(void)
 {
     int modifie = 0, i;
 
     /*
-     * Construire l'ensemble des variables utilisateur lues au moins
-     * une fois comme operande dans tout le code intermediaire.
-     * Une variable presente dans cet ensemble ne peut jamais etre
-     * eliminee, quelle que soit sa position.
+     Construire l'ensemble des variables utilisateur lues au moins
+     une fois comme operande dans tout le code intermediaire.
+     Une variable presente dans cet ensemble ne peut jamais etre
+     eliminee, quelle que soit sa position.
      */
     char lues[MAX_QUADS][100];
     int  nb_lues = 0;
@@ -753,28 +675,11 @@ static int elimination_variables_mortes(void)
      2. Les temporaires dont le resultat n'est jamais relu
         (compter_utilisations == 0) : le calcul est inutile
 
-   CORRECTION BUG SAUTS (FIX 2) :
-   Apres compaction du tableau, tous les indices absolus stockes dans
-   le champ res des BZ/BR deviennent invalides car les quads ont bouge.
-   On construit une table de remappage old_idx -> new_idx AVANT de
-   compacter, puis on met a jour chaque cible de saut AVANT la compaction.
-
-   CORRECTION BUG BR MORT (FIX 3) :
-   Un BR dont la cible pointe vers le quad immediatement suivant est un
-   saut inutile (le flot d'execution y arrive naturellement).
-   On le detecte APRES le remappage (quand les indices sont definitifs)
-   et on le marque a_supprimer.
-
-   Exemple :
-     23 - (BZ, T21, , 25)   =>  si faux => aller en 25
-     24 - (BR, , , 25)      =>  sinon => aller en 25 aussi : inutile => supprime
-     25 - (+, i, 1, T26)
-
-   Exemple general (diapo 107) :
+   Exemple general:
      x   = t3       =>  x n'est jamais utilise apres => supprime
      a[t2] = t5     =>  conserve
      a[t4] = t3     =>  conserve
-   ========================================================================= */
+  */
 static int elimination_code_inutile(void)
 {
     int modifie = 0, i;
@@ -795,9 +700,9 @@ static int elimination_code_inutile(void)
             a_supprimer[i] = 1;
     }
 
-    /* ------------------------------------------------------------------
+    /* 
        ETAPE 1 : construire la table de remappage old_idx -> new_idx
-       ------------------------------------------------------------------ */
+     */
     int remap[MAX_QUADS];
     int nouveau_qc = 0;
     for (i = 0; i < qc; i++) {
@@ -807,14 +712,14 @@ static int elimination_code_inutile(void)
             remap[i] = nouveau_qc++;
     }
 
-    /* ------------------------------------------------------------------
+    /* 
        ETAPE 2 : mettre a jour les cibles BZ / BR avant la compaction.
        Pour un saut vers old_target :
          - si old_target est supprime, avancer au premier quad conserve
          - sinon utiliser remap[old_target]
        Si old_target >= qc c'est la cible "sortie programme" : on la
        laisse pointer vers nouveau_qc (label de fin genere par asm8086).
-       ------------------------------------------------------------------ */
+      */
     for (i = 0; i < qc; i++) {
         if (a_supprimer[i]) continue;
         if (!est_saut(quad[i].oper)) continue;
@@ -840,7 +745,7 @@ static int elimination_code_inutile(void)
         strcpy(quad[i].res, buf);
     }
 
-    /* ------------------------------------------------------------------
+    /*
        ETAPE 2b : FIX BR MORT
        Apres remappage, un BR dont la cible == son propre nouvel indice + 1
        est un saut vers l'instruction suivante : il n'a aucun effet et
@@ -850,7 +755,7 @@ static int elimination_code_inutile(void)
          quad 23 : BZ T21 -> 25   (conserve, apres remap -> new_idx 25)
          quad 24 : BR -> 25       (apres remap new_idx=24, cible=25=24+1 => mort)
          quad 25 : ...
-       ------------------------------------------------------------------ */
+  */
     for (i = 0; i < qc; i++) {
         if (a_supprimer[i]) continue;
         if (strcmp(quad[i].oper, "BR") != 0) continue;
@@ -864,9 +769,9 @@ static int elimination_code_inutile(void)
         }
     }
 
-    /* ------------------------------------------------------------------
+    /*
        ETAPE 3 : compacter le tableau en retirant les quads marques
-       ------------------------------------------------------------------ */
+        */
     nouveau_qc = 0;
     for (i = 0; i < qc; i++) {
         if (!a_supprimer[i]) {
@@ -880,29 +785,12 @@ static int elimination_code_inutile(void)
     return modifie;
 }
 
-
-/* =========================================================================
-   OPTIMISER_QUADRUPLETS : point d'entree de l'optimisation
-
-   Ordre des passes a chaque iteration :
-     1. Propagation de constantes symboliques  (MAX => 100 partout)
-     2. Simplification algebrique              (X*1=>X, X+0=>X, C*C=>resultat)
-     3. Simplification constantes chainees     (t=j+1; r=t-1 => r=j)
-        FIX : garde est_utilise_comme_index pour ne pas fusionner les indices tableau
-     4. Propagation de copie                   (dst:=src => remplacer dst par src)
-     5. Propagation d'expression               (T:=src utilise 1 fois => inline)
-        FIX : garde est_utilise_comme_index pour ne pas propager les indices tableau
-     6. Elimination des expressions redond.    (a+b calcule 2 fois => reutiliser)
-     7. Elimination de variables mortes        (variables jamais lues => supprimer)
-        FIX : extraction du nom de base pour les tableaux "Tab[i]"
-     8. Elimination de code inutile            (NOP et temporaires morts => retirer)
-        FIX : remappage des sauts BZ/BR avant compaction
-        FIX : suppression des BR dont la cible == indice suivant (saut mort)
-        FIX : formater_nombre utilise long long pour eviter les debordements
-
+/*   Chaque passe retourne 1 si elle a modifie au moins un quadruplet.
+   La boucle recommence tant qu'au moins une passe a produit un changement.   
    Chaque passe retourne 1 si elle a modifie au moins un quadruplet.
-   La boucle recommence tant qu'au moins une passe a produit un changement.
-   ========================================================================= */
+*/
+
+
 void optimiser_quadruplets(void)
 {
     int modifie, iterations = 0;
