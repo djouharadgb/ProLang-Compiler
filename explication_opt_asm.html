@@ -1,0 +1,1308 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phases d'Optimisation &amp; Génération ASM 8086</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=JetBrains+Mono:wght@400;600&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #0d0f14;
+    --surface:  #13161e;
+    --card:     #191d28;
+    --border:   #252a38;
+    --accent:   #4af0a4;
+    --accent2:  #f0a44a;
+    --accent3:  #a44af0;
+    --accent4:  #4a9ef0;
+    --text:     #d4dbe8;
+    --muted:    #7a8299;
+    --danger:   #f05a4a;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Lora', Georgia, serif;
+    font-size: 16px;
+    line-height: 1.75;
+    min-height: 100vh;
+  }
+
+  /* ---- GRAIN OVERLAY ---- */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+    opacity: .4;
+  }
+
+  /* ---- HERO ---- */
+  .hero {
+    background: linear-gradient(135deg, #0d0f14 0%, #13161e 50%, #0a1a14 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 64px 40px 48px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::after {
+    content: '';
+    position: absolute;
+    top: -60px; right: -60px;
+    width: 380px; height: 380px;
+    background: radial-gradient(circle, rgba(74,240,164,.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 18px;
+    display: inline-block;
+    padding: 4px 12px;
+    border: 1px solid rgba(74,240,164,.3);
+    border-radius: 2px;
+  }
+  .hero h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(28px, 5vw, 52px);
+    font-weight: 800;
+    line-height: 1.1;
+    margin-bottom: 20px;
+    background: linear-gradient(135deg, #d4dbe8 30%, var(--accent));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .hero p { color: var(--muted); max-width: 680px; font-size: 15px; }
+
+  /* ---- LAYOUT ---- */
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 32px; }
+
+  /* ---- NAV ---- */
+  nav {
+    background: rgba(13,15,20,.95);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    position: sticky; top: 0; z-index: 100;
+    display: flex; gap: 0; overflow-x: auto;
+  }
+  nav a {
+    color: var(--muted);
+    text-decoration: none;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    padding: 14px 18px;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: color .2s, border-color .2s;
+  }
+  nav a:hover { color: var(--text); }
+  nav a.opt  { border-bottom-color: var(--accent); color: var(--accent); }
+  nav a.asm  { border-bottom-color: var(--accent2); color: var(--accent2); }
+
+  /* ---- SECTIONS ---- */
+  section { padding: 64px 0; }
+  section + section { border-top: 1px solid var(--border); }
+
+  .section-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
+    padding: 5px 14px;
+    border-radius: 2px;
+    margin-bottom: 24px;
+  }
+  .badge-opt { background: rgba(74,240,164,.1); color: var(--accent); border: 1px solid rgba(74,240,164,.25); }
+  .badge-asm { background: rgba(240,164,74,.1); color: var(--accent2); border: 1px solid rgba(240,164,74,.25); }
+
+  h2 {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(22px, 3.5vw, 34px);
+    font-weight: 800;
+    margin-bottom: 12px;
+    color: #fff;
+  }
+  .lead { color: var(--muted); font-size: 15px; max-width: 720px; margin-bottom: 48px; }
+
+  /* ---- PASS CARDS ---- */
+  .passes-grid { display: flex; flex-direction: column; gap: 32px; }
+
+  .pass-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color .2s;
+  }
+  .pass-card:hover { border-color: var(--accent); }
+
+  .pass-header {
+    display: flex; align-items: flex-start; gap: 20px;
+    padding: 24px 28px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .pass-num {
+    font-family: 'Syne', sans-serif;
+    font-size: 48px; font-weight: 800;
+    line-height: 1; flex-shrink: 0;
+    width: 64px;
+  }
+  .pass-num.c1 { color: rgba(74,240,164,.35); }
+  .pass-num.c2 { color: rgba(74,158,240,.35); }
+  .pass-num.c3 { color: rgba(164,74,240,.35); }
+  .pass-num.c4 { color: rgba(240,90,74,.35); }
+  .pass-num.c5 { color: rgba(240,164,74,.35); }
+  .pass-num.c6 { color: rgba(74,240,164,.35); }
+  .pass-num.c7 { color: rgba(74,158,240,.35); }
+  .pass-num.c8 { color: rgba(164,74,240,.35); }
+
+  .pass-title { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 700; color: #fff; }
+  .pass-subtitle { color: var(--muted); font-size: 13px; margin-top: 4px; font-family: 'JetBrains Mono', monospace; }
+
+  .pass-body { padding: 24px 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media (max-width: 700px) { .pass-body { grid-template-columns: 1fr; } }
+
+  .pass-explain { font-size: 15px; line-height: 1.75; }
+  .pass-explain ul { padding-left: 20px; margin-top: 8px; }
+  .pass-explain li { margin-bottom: 4px; }
+
+  /* ---- CODE BLOCKS ---- */
+  .code-block {
+    background: #0a0c11;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    font-size: 13px;
+  }
+  .code-header {
+    background: #111420;
+    padding: 8px 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .code-header .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .code-body { padding: 16px; overflow-x: auto; }
+  .code-body pre {
+    font-family: 'JetBrains Mono', monospace;
+    line-height: 1.6;
+    white-space: pre;
+    color: var(--text);
+  }
+  .kw  { color: #a44af0; }
+  .str { color: #4af0a4; }
+  .cmt { color: #4a5a6a; font-style: italic; }
+  .num { color: #f0a44a; }
+  .op  { color: #f05a4a; }
+  .lbl { color: #4a9ef0; }
+  .arr { color: #f0a44a; font-weight: 600; }
+
+  /* ---- ARROWS / TRANSFORM ---- */
+  .transform-box {
+    background: #0a0c11;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+  }
+  .tf-row { display: flex; align-items: center; gap: 12px; padding: 4px 0; }
+  .tf-before { color: var(--danger); text-decoration: line-through; opacity: .7; flex: 1; }
+  .tf-arrow { color: var(--accent); font-size: 18px; }
+  .tf-after  { color: var(--accent); flex: 1; }
+  .tf-why    { color: var(--muted); font-size: 11px; display: block; padding: 2px 0 6px 0; }
+
+  /* ---- BUG FIX TAGS ---- */
+  .fix-tag {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: rgba(240,164,74,.1);
+    border: 1px solid rgba(240,164,74,.3);
+    color: var(--accent2);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; letter-spacing: 1px;
+    padding: 2px 8px; border-radius: 2px;
+    margin-left: 8px;
+  }
+
+  /* ---- ASM SECTION ---- */
+  .asm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media (max-width: 800px) { .asm-grid { grid-template-columns: 1fr; } }
+
+  .asm-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color .2s;
+  }
+  .asm-card:hover { border-color: var(--accent2); }
+  .asm-card-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--accent2);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .asm-card-body { padding: 16px 20px; font-size: 14px; line-height: 1.7; }
+  .asm-card-code { padding: 0 0 16px; }
+
+  /* ---- PIPELINE ---- */
+  .pipeline {
+    display: flex; align-items: stretch; gap: 0;
+    margin: 32px 0; overflow-x: auto;
+  }
+  .pipe-step {
+    flex: 1; min-width: 120px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-right: none;
+    padding: 18px 16px;
+    text-align: center;
+    position: relative;
+  }
+  .pipe-step:first-child { border-radius: 6px 0 0 6px; }
+  .pipe-step:last-child  { border-radius: 0 6px 6px 0; border-right: 1px solid var(--border); }
+  .pipe-step::after {
+    content: '▶';
+    position: absolute; right: -12px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--accent); font-size: 14px;
+    z-index: 2;
+  }
+  .pipe-step:last-child::after { display: none; }
+  .pipe-icon { font-size: 22px; margin-bottom: 6px; }
+  .pipe-label { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); }
+  .pipe-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; color: #fff; margin: 4px 0; }
+
+  /* ---- UTIL FUNCTIONS ---- */
+  .utils-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+  .util-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px 18px;
+    transition: border-color .2s;
+  }
+  .util-card:hover { border-color: var(--accent3); }
+  .util-fn {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--accent3);
+    font-size: 13px; font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .util-desc { font-size: 13px; color: var(--muted); line-height: 1.55; }
+
+  /* ---- ALERT BOX ---- */
+  .alert {
+    display: flex; gap: 14px; align-items: flex-start;
+    padding: 16px 20px;
+    border-radius: 6px;
+    margin: 20px 0;
+    font-size: 14px;
+    line-height: 1.65;
+  }
+  .alert-warn { background: rgba(240,164,74,.08); border: 1px solid rgba(240,164,74,.25); }
+  .alert-info { background: rgba(74,240,164,.08); border: 1px solid rgba(74,240,164,.25); }
+  .alert-icon { font-size: 20px; flex-shrink: 0; }
+
+  /* ---- FOOTER ---- */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 32px;
+    text-align: center;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+  }
+
+  .full-width { grid-column: 1 / -1; }
+  hr.divider { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+
+  .inline-code {
+    font-family: 'JetBrains Mono', monospace;
+    background: #111420;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 13px;
+    color: var(--accent3);
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { background: #111420; padding: 10px 14px; text-align: left; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); letter-spacing: 1px; border: 1px solid var(--border); }
+  td { padding: 9px 14px; border: 1px solid var(--border); vertical-align: top; }
+  tr:nth-child(even) td { background: rgba(255,255,255,.02); }
+  td:first-child { font-family: 'JetBrains Mono', monospace; color: var(--accent2); font-size: 12px; }
+
+  .tag-green { color: var(--accent); font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+  .tag-blue  { color: var(--accent4); font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="container">
+    <span class="hero-tag">📘 Documentation Technique · Compilation</span>
+    <h1>Optimisation &amp; Génération<br>Assembleur 8086</h1>
+    <p>Explication complète des deux dernières phases du compilateur : les 8 passes d'optimisation du code intermédiaire (<span class="inline-code">opt.c</span>) et la traduction vers l'assembleur Intel 8086 (<span class="inline-code">asm8086.c</span>), avec exemples concrets pour chaque fonction.</p>
+  </div>
+</div>
+
+<!-- NAV -->
+<nav>
+  <a href="#intro">Intro</a>
+  <a href="#utils">Utilitaires</a>
+  <a href="#opt" class="opt">⚙ Optimisation (8 passes)</a>
+  <a href="#p1" class="opt">P1</a><a href="#p2" class="opt">P2</a><a href="#p3" class="opt">P3</a>
+  <a href="#p4" class="opt">P4</a><a href="#p5" class="opt">P5</a><a href="#p6" class="opt">P6</a>
+  <a href="#p7" class="opt">P7</a><a href="#p8" class="opt">P8</a>
+  <a href="#asm" class="asm">🖥 Génération ASM</a>
+  <a href="#entrypoint" class="asm">Point d'entrée</a>
+</nav>
+
+
+<!-- INTRO -->
+<section id="intro">
+<div class="container">
+  <div class="section-badge badge-opt">Vue d'ensemble</div>
+  <h2>Le pipeline complet</h2>
+  <p class="lead">Après l'analyse syntaxique et la génération du code intermédiaire (quadruplets), le compilateur applique deux grandes phases : l'optimisation, puis la génération du code assembleur.</p>
+
+  <div class="pipeline">
+    <div class="pipe-step">
+      <div class="pipe-icon">📝</div>
+      <div class="pipe-title">Source</div>
+      <div class="pipe-label">Prog.pro</div>
+    </div>
+    <div class="pipe-step">
+      <div class="pipe-icon">🔍</div>
+      <div class="pipe-title">Analyse</div>
+      <div class="pipe-label">Lex + Syn.y</div>
+    </div>
+    <div class="pipe-step">
+      <div class="pipe-icon">📋</div>
+      <div class="pipe-title">Quadruplets</div>
+      <div class="pipe-label">quad[]</div>
+    </div>
+    <div class="pipe-step" style="border-color:var(--accent); background: rgba(74,240,164,.05);">
+      <div class="pipe-icon">⚙️</div>
+      <div class="pipe-title" style="color:var(--accent)">Optimisation</div>
+      <div class="pipe-label">opt.c · 8 passes</div>
+    </div>
+    <div class="pipe-step" style="border-color:var(--accent2); background: rgba(240,164,74,.05); border-right:1px solid var(--accent2);">
+      <div class="pipe-icon">🖥️</div>
+      <div class="pipe-title" style="color:var(--accent2)">ASM 8086</div>
+      <div class="pipe-label">asm8086.c</div>
+    </div>
+  </div>
+
+  <div class="alert alert-info">
+    <span class="alert-icon">💡</span>
+    <div>Les <strong>quadruplets</strong> sont des instructions de la forme <span class="inline-code">(opérateur, op1, op2, résultat)</span>. L'optimiseur les transforme en place dans le tableau global <span class="inline-code">quad[]</span>. Le générateur ASM lit ensuite ce tableau optimisé pour produire le fichier <span class="inline-code">.asm</span>.</div>
+  </div>
+</div>
+</section>
+
+
+<!-- UTILITAIRES -->
+<section id="utils">
+<div class="container">
+  <div class="section-badge badge-opt">opt.c · Fonctions internes</div>
+  <h2>Les fonctions utilitaires</h2>
+  <p class="lead">Ces petites fonctions <span class="inline-code">static</span> sont utilisées par toutes les passes. Il faut les maîtriser car chaque passe en dépend.</p>
+
+  <div class="utils-grid">
+    <div class="util-card">
+      <div class="util-fn">est_nombre(s)</div>
+      <div class="util-desc">Vérifie si la chaîne représente un nombre (entier ou flottant, signe optionnel). Utilisé partout pour distinguer les littéraux des noms de variables.<br><br><strong>Exemple :</strong> <span class="inline-code">"42"</span> → 1, <span class="inline-code">"-3.5"</span> → 1, <span class="inline-code">"x"</span> → 0, <span class="inline-code">"T5"</span> → 0</div>
+    </div>
+    <div class="util-card">
+      <div class="util-fn">est_temporaire(s)</div>
+      <div class="util-desc">Vérifie si s a la forme T0, T1, T42... (T majuscule suivi de chiffres uniquement). Les temporaires sont créés par le compilateur, pas par le programmeur.<br><br><strong>Exemple :</strong> <span class="inline-code">"T12"</span> → 1, <span class="inline-code">"Tab"</span> → 0, <span class="inline-code">"i"</span> → 0</div>
+    </div>
+    <div class="util-card">
+      <div class="util-fn">est_saut(op)</div>
+      <div class="util-desc">Retourne 1 si l'opérateur est <span class="inline-code">BZ</span> (Branch if Zero) ou <span class="inline-code">BR</span> (Branch unconditional). Les sauts sont des barrières de contrôle de flot que l'on ne doit pas franchir lors de la propagation.</div>
+    </div>
+    <div class="util-card">
+      <div class="util-fn">a_effet_de_bord(i)</div>
+      <div class="util-desc">Retourne 1 si le quadruplet i ne peut <strong>jamais être supprimé</strong> même si son résultat est inutilisé. Cas : sauts (<span class="inline-code">BZ/BR</span>), lecture clavier (<span class="inline-code">input</span>), affichage écran (<span class="inline-code">out</span>).</div>
+    </div>
+    <div class="util-card">
+      <div class="util-fn">compter_utilisations(var)</div>
+      <div class="util-desc">Compte combien de fois la variable apparaît en <span class="inline-code">op1</span> ou <span class="inline-code">op2</span> dans tout le tableau de quadruplets. Utilisé pour savoir si un temporaire est mort (0 fois) ou à usage unique (1 fois).<br><br><strong>Attention :</strong> ne voit PAS les indices de tableau dans les résultats (ex: <span class="inline-code">Tab[T5]</span>), d'où <span class="inline-code">est_utilise_comme_index</span>.</div>
+    </div>
+    <div class="util-card">
+      <div class="util-fn">est_utilise_comme_index(var)</div>
+      <div class="util-desc">Cherche si <span class="inline-code">var</span> apparaît entre crochets dans un champ <span class="inline-code">res</span>, ex: <span class="inline-code">Tab[T36]</span>. Cela corrige le bug où <span class="inline-code">compter_utilisations</span> voyait 0 usages alors que T36 était indispensable.</div>
+    </div>
+    <div class="util-card">
+      <div class="util-fn">est_redefini_entre(var, debut, fin)</div>
+      <div class="util-desc">Vérifie si <span class="inline-code">var</span> apparaît comme résultat (donc réécrite) dans les quads [debut, fin[. Utilisé avant une substitution pour s'assurer que la valeur n'a pas changé entre-temps.<br><br><strong>Exemple :</strong> entre la définition de <span class="inline-code">t1</span> et son usage, si <span class="inline-code">x</span> est réécrit, on ne peut pas substituer <span class="inline-code">t1</span> par <span class="inline-code">x</span>.</div>
+    </div>
+    <div class="util-card">
+      <div class="util-fn">formater_nombre(v, buf)</div>
+      <div class="util-desc">Convertit un double en chaîne. Si la valeur est entière (ex: 4.0), écrit <span class="inline-code">"4"</span> et non <span class="inline-code">"4.000000"</span>. Utilise <span class="inline-code">long long</span> pour éviter les débordements sur les grandes valeurs.</div>
+    </div>
+    <div class="util-card">
+      <div class="util-fn">nom_base_tableau(res, buf)</div>
+      <div class="util-desc">Si <span class="inline-code">res</span> vaut <span class="inline-code">"Tabfloat[i]"</span>, extrait et retourne <span class="inline-code">"Tabfloat"</span>. Nécessaire pour comparer correctement avec les variables lues dans <span class="inline-code">op1/op2</span> (qui ne contiennent jamais les crochets).</div>
+    </div>
+  </div>
+</div>
+</section>
+
+
+<!-- OPTIMISATION -->
+<section id="opt">
+<div class="container">
+  <div class="section-badge badge-opt">opt.c</div>
+  <h2>Phase d'optimisation — 8 passes itératives</h2>
+  <p class="lead">La fonction <span class="inline-code">optimiser_quadruplets()</span> tourne en boucle jusqu'à ce qu'aucune passe ne modifie plus rien (ou 30 itérations max). Chaque passe retourne 1 si elle a changé quelque chose.</p>
+
+  <div class="passes-grid">
+
+    <!-- PASSE 1 -->
+    <div class="pass-card" id="p1">
+      <div class="pass-header">
+        <div class="pass-num c1">1</div>
+        <div>
+          <div class="pass-title">Propagation de constantes symboliques</div>
+          <div class="pass-subtitle">propagation_constantes_symboliques()</div>
+        </div>
+      </div>
+      <div class="pass-body">
+        <div class="pass-explain">
+          <p><strong>Principe :</strong> Certaines variables sont déclarées <span class="inline-code">CONST</span> dans la table des symboles. Cette passe remplace leurs occurrences en <span class="inline-code">op1/op2</span> par leur valeur numérique, afin que les passes suivantes puissent travailler sur des littéraux.</p>
+          <br>
+          <p><strong>Comment ça marche :</strong></p>
+          <ul>
+            <li>Pour chaque quadruplet, examiner <span class="inline-code">op1</span> et <span class="inline-code">op2</span></li>
+            <li>Si le champ est un nom (pas un nombre) et que <span class="inline-code">ts_est_constante(nom)</span> est vraie</li>
+            <li>Récupérer la valeur via <span class="inline-code">ts_get_val(nom)</span></li>
+            <li>Remplacer le nom par la valeur en mémoire (<span class="inline-code">strcpy</span>)</li>
+          </ul>
+        </div>
+        <div>
+          <div class="code-block">
+            <div class="code-header"><div class="dot" style="background:#4af0a4"></div>Exemple — avant/après</div>
+            <div class="code-body"><pre><span class="cmt">; Déclaration : const MAX := 100</span>
+
+<span class="cmt">; AVANT (quadruplets bruts)</span>
+<span class="op">(:=,</span> <span class="num">100</span>, , MAX<span class="op">)</span>
+<span class="op">(<=,</span> i, MAX, T5<span class="op">)</span>
+
+<span class="cmt">; APRÈS passe 1</span>
+<span class="op">(:=,</span> <span class="num">100</span>, , MAX<span class="op">)</span>
+<span class="op">(<=,</span> i, <span class="num">100</span>, T5<span class="op">)</span>  <span class="cmt">← MAX remplacé par 100</span></pre></div>
+          </div>
+          <div class="alert alert-info" style="margin-top:12px;">
+            <span class="alert-icon">ℹ️</span>
+            <div>Cette passe ne modifie que les <strong>opérandes</strong> (op1, op2), jamais les résultats. L'affectation <span class="inline-code">MAX := 100</span> sera supprimée plus tard par la passe 7 (variable morte).</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PASSE 2 -->
+    <div class="pass-card" id="p2">
+      <div class="pass-header">
+        <div class="pass-num c2">2</div>
+        <div>
+          <div class="pass-title">Simplification algébrique</div>
+          <div class="pass-subtitle">simplification_algebrique()</div>
+        </div>
+      </div>
+      <div class="pass-body">
+        <div class="pass-explain">
+          <p><strong>Principe :</strong> Appliquer des règles mathématiques pour simplifier les opérations sans changer le résultat. Si les deux opérandes sont des constantes, on calcule le résultat directement à la compilation (<em>constant folding</em>).</p>
+          <br>
+          <p><strong>Règles appliquées :</strong></p>
+          <table style="font-size:12px; margin-top:8px;">
+            <tr><th>Opération</th><th>Résultat</th></tr>
+            <tr><td>X + 0 ou 0 + X</td><td class="tag-green">X</td></tr>
+            <tr><td>X - 0</td><td class="tag-green">X</td></tr>
+            <tr><td>X - X</td><td class="tag-green">0</td></tr>
+            <tr><td>X * 0 ou 0 * X</td><td class="tag-green">0</td></tr>
+            <tr><td>X * 1 ou 1 * X</td><td class="tag-green">X</td></tr>
+            <tr><td>X * 2 ou 2 * X</td><td class="tag-green">X + X</td></tr>
+            <tr><td>X * 4</td><td class="tag-green">X * 2 (→ relance)</td></tr>
+            <tr><td>X / 1</td><td class="tag-green">X</td></tr>
+            <tr><td>X / X</td><td class="tag-green">1</td></tr>
+            <tr><td>C1 op C2</td><td class="tag-green">résultat calculé</td></tr>
+          </table>
+        </div>
+        <div>
+          <div class="code-block">
+            <div class="code-header"><div class="dot" style="background:#4a9ef0"></div>Exemples de transformations</div>
+            <div class="code-body"><pre><span class="cmt">; X * 0 → 0</span>
+<span class="op">(*,</span> n, <span class="num">0</span>, T3<span class="op">)</span>
+  <span class="arr">↓</span>
+<span class="op">(:=,</span> <span class="num">0</span>, , T3<span class="op">)</span>
+
+<span class="cmt">; 3 * 4 → 12  (folding à la compilation)</span>
+<span class="op">(*,</span> <span class="num">3</span>, <span class="num">4</span>, T5<span class="op">)</span>
+  <span class="arr">↓</span>
+<span class="op">(:=,</span> <span class="num">12</span>, , T5<span class="op">)</span>
+
+<span class="cmt">; 2 * X → X + X  (addition = moins cher)</span>
+<span class="op">(*,</span> <span class="num">2</span>, x, T7<span class="op">)</span>
+  <span class="arr">↓</span>
+<span class="op">(+,</span> x, x, T7<span class="op">)</span>
+
+<span class="cmt">; X * 8 → X * 4 (puis relance → X * 2 → X+X)</span>
+<span class="op">(*,</span> y, <span class="num">8</span>, T9<span class="op">)</span>
+  <span class="arr">↓</span>
+<span class="op">(*,</span> y, <span class="num">4</span>, T9<span class="op">)</span></pre></div>
+          </div>
+          <div class="alert alert-warn" style="margin-top:12px;">
+            <span class="alert-icon">🐛</span>
+            <div><strong>Bug corrigé — 2*X :</strong> L'ancienne version faisait <span class="inline-code">strcpy(a,b); strcpy(b,a);</span> ce qui écrasait <span class="inline-code">a</span> avant de le copier dans <span class="inline-code">b</span>. Résultat : <span class="inline-code">b=b</span> au lieu de <span class="inline-code">b=X</span>. Le fix utilise un tampon <span class="inline-code">tmp</span>.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PASSE 3 -->
+    <div class="pass-card" id="p3">
+      <div class="pass-header">
+        <div class="pass-num c3">3</div>
+        <div>
+          <div class="pass-title">Simplification des constantes chaînées</div>
+          <div class="pass-subtitle">simplification_constantes_chainees()</div>
+        </div>
+      </div>
+      <div class="pass-body">
+        <div class="pass-explain">
+          <p><strong>Principe :</strong> Détecter un pattern où un temporaire T est défini par <span class="inline-code">X +/- C1</span>, puis immédiatement utilisé dans <span class="inline-code">T +/- C2</span>. Si T n'est utilisé qu'une fois, on fusionne les deux constantes en une seule opération.</p>
+          <br>
+          <p><strong>Conditions requises :</strong></p>
+          <ul>
+            <li>Le 1er quad est <span class="inline-code">+</span> ou <span class="inline-code">-</span> avec une constante en op2</li>
+            <li>Le résultat <span class="inline-code">res1</span> est un temporaire</li>
+            <li><span class="inline-code">compter_utilisations(res1) == 1</span></li>
+            <li>Pas de saut entre les deux quads</li>
+            <li>T n'est pas un indice de tableau <span class="fix-tag">FIX</span></li>
+          </ul>
+          <br>
+          <p><strong>Calcul du décalage net :</strong></p>
+          <ul>
+            <li>T = X+3, R = T+5 → R = X+<strong>8</strong></li>
+            <li>T = X+7, R = T-2 → R = X+<strong>5</strong></li>
+            <li>T = X-3, R = T+8 → R = X+<strong>5</strong></li>
+            <li>T = X+1, R = T-1 → R = X (affectation directe)</li>
+          </ul>
+        </div>
+        <div>
+          <div class="code-block">
+            <div class="code-header"><div class="dot" style="background:#a44af0"></div>Exemple complet</div>
+            <div class="code-body"><pre><span class="cmt">; AVANT</span>
+<span class="op">(+,</span> j, <span class="num">1</span>, T10<span class="op">)</span>   <span class="cmt">← T10 = j + 1</span>
+<span class="op">(-,</span> T10, <span class="num">1</span>, T11<span class="op">)</span>  <span class="cmt">← T11 = T10 - 1</span>
+
+<span class="cmt">; APRÈS  (1 - 1 = 0 → affectation directe)</span>
+<span class="op">(:=,</span> j, , T11<span class="op">)</span>    <span class="cmt">← T11 = j</span>
+<span class="op">(NOP, , , )</span>        <span class="cmt">← T10 supprimé</span>
+
+<span class="cmt">; Autre exemple</span>
+<span class="op">(+,</span> x, <span class="num">3</span>, T20<span class="op">)</span>
+<span class="op">(+,</span> T20, <span class="num">5</span>, T21<span class="op">)</span>
+  <span class="arr">↓</span>
+<span class="op">(+,</span> x, <span class="num">8</span>, T21<span class="op">)</span>   <span class="cmt">← 3+5=8</span>
+<span class="op">(NOP, , , )</span></pre></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PASSE 4 -->
+    <div class="pass-card" id="p4">
+      <div class="pass-header">
+        <div class="pass-num c4">4</div>
+        <div>
+          <div class="pass-title">Propagation de copie</div>
+          <div class="pass-subtitle">propagation_copie()</div>
+        </div>
+      </div>
+      <div class="pass-body">
+        <div class="pass-explain">
+          <p><strong>Principe :</strong> Quand on voit <span class="inline-code">dst := src</span>, on remplace toutes les utilisations futures de <span class="inline-code">dst</span> par <span class="inline-code">src</span> directement. Cela élimine les affectations intermédiaires inutiles.</p>
+          <br>
+          <p><strong>Arrêt de la propagation si :</strong></p>
+          <ul>
+            <li>Un saut est rencontré (barrière)</li>
+            <li><span class="inline-code">dst</span> est réassigné</li>
+            <li><span class="inline-code">src</span> est réassigné (la copie n'est plus valide)</li>
+          </ul>
+          <div class="alert alert-warn" style="margin-top: 14px;">
+            <span class="alert-icon">⚠️</span>
+            <div><strong>Bug corrigé — boucles :</strong> On ne propage QUE les temporaires en destination. Propager une variable utilisateur (<span class="inline-code">i</span>, <span class="inline-code">x</span>...) était dangereux : dans une boucle <span class="inline-code">i := 1</span> puis <span class="inline-code">i := i+1</span>, remplacer tous les <span class="inline-code">i</span> par <span class="inline-code">1</span> casse la condition d'arrêt.</div>
+          </div>
+        </div>
+        <div>
+          <div class="code-block">
+            <div class="code-header"><div class="dot" style="background:#f05a4a"></div>Exemple</div>
+            <div class="code-body"><pre><span class="cmt">; AVANT</span>
+<span class="op">(:=,</span> T2, , T1<span class="op">)</span>       <span class="cmt">← T1 := T2</span>
+<span class="op">(*,</span> <span class="num">4</span>, T1, T3<span class="op">)</span>      <span class="cmt">← T3 = 4 * T1</span>
+<span class="op">(+,</span> T1, T3, T4<span class="op">)</span>     <span class="cmt">← T4 = T1 + T3</span>
+
+<span class="cmt">; APRÈS  (T1 remplacé par T2 partout)</span>
+<span class="op">(:=,</span> T2, , T1<span class="op">)</span>
+<span class="op">(*,</span> <span class="num">4</span>, T2, T3<span class="op">)</span>      <span class="cmt">← T2 à la place de T1</span>
+<span class="op">(+,</span> T2, T3, T4<span class="op">)</span>     <span class="cmt">← T2 à la place de T1</span>
+
+<span class="cmt">; Puis passe 5 éliminera T1 := T2 si T1 = mort</span></pre></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PASSE 5 -->
+    <div class="pass-card" id="p5">
+      <div class="pass-header">
+        <div class="pass-num c5">5</div>
+        <div>
+          <div class="pass-title">Propagation d'expression</div>
+          <div class="pass-subtitle">propagation_expression()</div>
+        </div>
+      </div>
+      <div class="pass-body">
+        <div class="pass-explain">
+          <p><strong>Principe :</strong> Si un temporaire T est défini par une affectation simple (<span class="inline-code">T := src</span>) et n'est utilisé qu'<strong>une seule fois</strong>, on substitue directement <span class="inline-code">src</span> à sa place d'utilisation, puis on supprime la définition de T (NOP).</p>
+          <br>
+          <p><strong>Différence avec passe 4 :</strong></p>
+          <ul>
+            <li>Passe 4 : propage vers <em>tous</em> les usages suivants</li>
+            <li>Passe 5 : propage vers <em>l'unique</em> usage et supprime la définition</li>
+          </ul>
+          <br>
+          <p><strong>Conditions :</strong></p>
+          <ul>
+            <li>T est un temporaire</li>
+            <li><span class="inline-code">compter_utilisations(T) == 1</span></li>
+            <li>T n'est pas indice de tableau <span class="fix-tag">FIX</span></li>
+            <li><span class="inline-code">src</span> n'est pas réassigné entre la définition et l'usage</li>
+          </ul>
+        </div>
+        <div>
+          <div class="code-block">
+            <div class="code-header"><div class="dot" style="background:#f0a44a"></div>Exemple</div>
+            <div class="code-body"><pre><span class="cmt">; AVANT</span>
+<span class="op">(:=,</span> a, , T1<span class="op">)</span>        <span class="cmt">← T1 := a  (utilisé 1 seule fois)</span>
+<span class="op">(*,</span> T1, b, T2<span class="op">)</span>       <span class="cmt">← T2 = T1 * b</span>
+
+<span class="cmt">; APRÈS</span>
+<span class="op">(NOP, , , )</span>           <span class="cmt">← définition supprimée</span>
+<span class="op">(*,</span> a, b, T2<span class="op">)</span>        <span class="cmt">← T1 remplacé par a directement</span>
+
+<span class="cmt">; Cas indice tableau — PAS propagé</span>
+<span class="op">(:=,</span> i, , T36<span class="op">)</span>
+<span class="op">(:=,</span> v, , Tab<span class="op">[</span>T36<span class="op">]</span>)  <span class="cmt">← T36 est indice → garder</span></pre></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PASSE 6 -->
+    <div class="pass-card" id="p6">
+      <div class="pass-header">
+        <div class="pass-num c6">6</div>
+        <div>
+          <div class="pass-title">Élimination des expressions redondantes (CSE)</div>
+          <div class="pass-subtitle">elimination_expressions_redondantes()</div>
+        </div>
+      </div>
+      <div class="pass-body">
+        <div class="pass-explain">
+          <p><strong>Principe :</strong> Common Subexpression Elimination. On maintient une table des expressions déjà calculées. Si la même expression réapparaît sans que ses opérandes aient changé, on remplace le recalcul par une copie du résultat précédent.</p>
+          <br>
+          <p><strong>Structure <span class="inline-code">ExpressionDisponible</span> :</strong></p>
+          <ul>
+            <li><span class="inline-code">operateur</span>, <span class="inline-code">operande1</span>, <span class="inline-code">operande2</span></li>
+            <li><span class="inline-code">resultat</span> : temporaire qui stocke la valeur</li>
+          </ul>
+          <br>
+          <p><strong>Règles d'invalidation :</strong></p>
+          <ul>
+            <li>Un saut vide toute la table</li>
+            <li>Une affectation <span class="inline-code">res := ...</span> invalide toutes les expressions contenant <span class="inline-code">res</span></li>
+            <li>La commutativité est gérée pour <span class="inline-code">+</span> et <span class="inline-code">*</span> (<span class="inline-code">a+b == b+a</span>)</li>
+          </ul>
+        </div>
+        <div>
+          <div class="code-block">
+            <div class="code-header"><div class="dot" style="background:#4af0a4"></div>Exemple</div>
+            <div class="code-body"><pre><span class="cmt">; AVANT</span>
+<span class="op">(+,</span> a, b, T1<span class="op">)</span>   <span class="cmt">← mémorisé : ("+",a,b) → T1</span>
+<span class="op">(*,</span> c, d, T2<span class="op">)</span>
+<span class="op">(+,</span> a, b, T3<span class="op">)</span>   <span class="cmt">← REDONDANT : a+b déjà dans T1</span>
+<span class="op">(*,</span> T3, e, T4<span class="op">)</span>
+
+<span class="cmt">; APRÈS</span>
+<span class="op">(+,</span> a, b, T1<span class="op">)</span>
+<span class="op">(*,</span> c, d, T2<span class="op">)</span>
+<span class="op">(:=,</span> T1, , T3<span class="op">)</span>  <span class="cmt">← T3 := T1  (copie, pas recalcul)</span>
+<span class="op">(*,</span> T3, e, T4<span class="op">)</span>
+
+<span class="cmt">; Puis passe 5 ou 4 simplifiera T3 := T1</span>
+
+<span class="cmt">; Commutativité : b+a reconnu comme a+b</span>
+<span class="op">(+,</span> b, a, T5<span class="op">)</span>   <span class="cmt">← T5 := T1 aussi</span></pre></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PASSE 7 -->
+    <div class="pass-card" id="p7">
+      <div class="pass-header">
+        <div class="pass-num c7">7</div>
+        <div>
+          <div class="pass-title">Élimination des variables mortes</div>
+          <div class="pass-subtitle">elimination_variables_mortes()</div>
+        </div>
+      </div>
+      <div class="pass-body">
+        <div class="pass-explain">
+          <p><strong>Principe :</strong> Supprimer les affectations de variables utilisateur qui ne sont <strong>jamais lues</strong> dans tout le programme. Une variable est morte si elle n'apparaît jamais en <span class="inline-code">op1</span> ou <span class="inline-code">op2</span>.</p>
+          <br>
+          <p><strong>Approche conservatrice (corrigée) :</strong> On fait d'abord un scan global pour lister toutes les variables lues. Puis on supprime uniquement les affectations vers des variables absentes de cette liste.</p>
+          <div class="alert alert-warn" style="margin-top:14px;">
+            <span class="alert-icon">🐛</span>
+            <div><strong>Bug corrigé — boucles :</strong> L'ancienne version faisait une analyse en passe arrière linéaire. Dans une boucle, l'incrément <span class="inline-code">i := i+1</span> était supprimé car au moment où il était scanné en arrière, <span class="inline-code">i</span> n'était pas encore marqué "vivant". La solution conservatrice résout ce problème.</div>
+          </div>
+          <div class="alert alert-info" style="margin-top:10px;">
+            <span class="alert-icon">🔧</span>
+            <div><strong>Bug corrigé — tableaux :</strong> <span class="inline-code">"Tabfloat[i]"</span> en résultat ≠ <span class="inline-code">"Tabfloat"</span> en op1. On extrait le nom de base via <span class="inline-code">nom_base_tableau()</span> avant de tester.</div>
+          </div>
+        </div>
+        <div>
+          <div class="code-block">
+            <div class="code-header"><div class="dot" style="background:#4a9ef0"></div>Exemple</div>
+            <div class="code-body"><pre><span class="cmt">; Variable Pi déclarée mais jamais lue</span>
+<span class="op">(:=,</span> <span class="num">3</span>, , Pi<span class="op">)</span>
+<span class="cmt">; scan global : Pi n'est dans aucun op1/op2</span>
+  <span class="arr">↓</span>
+<span class="op">(NOP, , , )</span>   <span class="cmt">← supprimé</span>
+
+<span class="cmt">; Variable i utilisée dans une boucle</span>
+<span class="op">(:=,</span> <span class="num">1</span>, , i<span class="op">)</span>          <span class="cmt">← init</span>
+<span class="op">(<=,</span> i, <span class="num">10</span>, T5<span class="op">)</span>      <span class="cmt">← i LU ici</span>
+<span class="op">(+,</span> i, <span class="num">1</span>, T6<span class="op">)</span>        <span class="cmt">← i LU ici</span>
+<span class="op">(:=,</span> T6, , i<span class="op">)</span>         <span class="cmt">← i dans la liste des lus → CONSERVÉ</span></pre></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PASSE 8 -->
+    <div class="pass-card" id="p8">
+      <div class="pass-header">
+        <div class="pass-num c8">8</div>
+        <div>
+          <div class="pass-title">Élimination de code inutile + Remappage des sauts</div>
+          <div class="pass-subtitle">elimination_code_inutile()</div>
+        </div>
+      </div>
+      <div class="pass-body">
+        <div class="pass-explain full-width">
+          <p><strong>Principe :</strong> Supprimer physiquement les NOP et les temporaires dont le résultat n'est jamais lu. Cette passe fait 3 étapes distinctes :</p>
+          <br>
+          <p><strong>Étape 1 — Identifier les quads à supprimer :</strong></p>
+          <ul>
+            <li>NOP (marqués par les passes précédentes)</li>
+            <li>Temporaires avec 0 utilisations (jamais lus) et pas indice de tableau</li>
+            <li>Ne jamais supprimer les effets de bord (input, out, sauts)</li>
+          </ul>
+          <br>
+          <p><strong>Étape 2 — Construire la table de remappage <span class="fix-tag">FIX</span> :</strong><br>
+          Avant de compacter, on calcule pour chaque quad ancien son nouvel index après compaction (<span class="inline-code">remap[old] = new</span>). On met ensuite à jour les cibles de tous les BZ/BR. Si la cible est elle-même supprimée, on avance au premier quad conservé.</p>
+          <br>
+          <p><strong>Étape 2b — Supprimer les BR morts <span class="fix-tag">FIX</span> :</strong><br>
+          Un BR dont la cible est l'instruction immédiatement suivante est un saut inutile. On le détecte après remappage et on le marque à supprimer.</p>
+          <br>
+          <p><strong>Étape 3 — Compacter le tableau :</strong><br>
+          Copier les quads non supprimés vers les indices consécutifs. Mettre à jour <span class="inline-code">qc</span> (nombre de quads).</p>
+        </div>
+        <div class="full-width">
+          <div class="code-block">
+            <div class="code-header"><div class="dot" style="background:#a44af0"></div>Exemple — remappage de saut</div>
+            <div class="code-body"><pre><span class="cmt">; AVANT compaction (indices originaux)</span>
+<span class="num">20</span>: <span class="op">(<=,</span> i, <span class="num">10</span>, T21<span class="op">)</span>
+<span class="num">21</span>: <span class="op">(NOP, , , )</span>              <span class="cmt">← supprimé → remap[21] = -1</span>
+<span class="num">22</span>: <span class="op">(BZ,</span> T21, , <span class="num">25</span><span class="op">)</span>         <span class="cmt">← cible 25 → recalcul nécessaire</span>
+<span class="num">23</span>: <span class="op">(NOP, , , )</span>              <span class="cmt">← supprimé</span>
+<span class="num">24</span>: <span class="op">(BR, , , 25)</span>             <span class="cmt">← après remap : cible = new(25) = 22+1 = mort</span>
+<span class="num">25</span>: <span class="op">(+,</span> i, <span class="num">1</span>, T26<span class="op">)</span>
+
+<span class="cmt">; Table remap : [20→20, 21→X, 22→21, 23→X, 24→22, 25→23]</span>
+<span class="cmt">; BZ 25 → BZ 23  ;  BR 25 → BR 23 (=22+1, mort)</span>
+
+<span class="cmt">; APRÈS compaction</span>
+<span class="num">20</span>: <span class="op">(<=,</span> i, <span class="num">10</span>, T21<span class="op">)</span>
+<span class="num">21</span>: <span class="op">(BZ,</span> T21, , <span class="num">23</span><span class="op">)</span>         <span class="cmt">← cible mise à jour</span>
+<span class="num">22</span>: <span class="cmt">[BR supprimé]</span>
+<span class="num">22</span>: <span class="op">(+,</span> i, <span class="num">1</span>, T26<span class="op">)</span>          <span class="cmt">← ex-indice 25</span></pre></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /passes-grid -->
+</div>
+</section>
+
+
+<!-- GÉNÉRATION ASM -->
+<section id="asm">
+<div class="container">
+  <div class="section-badge badge-asm">asm8086.c</div>
+  <h2>Phase de génération assembleur 8086</h2>
+  <p class="lead">La fonction <span class="inline-code">generer_asm()</span> traduit chaque quadruplet en instructions assembleur Intel 8086. Le code produit est un fichier <span class="inline-code">.asm</span> structuré en trois segments : pile, données, code.</p>
+
+  <!-- Structure générale -->
+  <div class="code-block" style="margin-bottom:32px;">
+    <div class="code-header"><div class="dot" style="background:#f0a44a"></div>Structure du fichier .asm généré</div>
+    <div class="code-body"><pre><span class="lbl">TITLE</span> prolang.asm
+
+<span class="lbl">PILE SEGMENT STACK</span>           <span class="cmt">; Segment de pile (100 mots)</span>
+    DW 100 DUP (?)
+base_pile EQU $
+<span class="lbl">PILE ENDS</span>
+
+<span class="lbl">DONNEE SEGMENT</span>               <span class="cmt">; Segment de données</span>
+    x                    DW ?
+    _T5                  DW ?        <span class="cmt">; temporaire</span>
+    Tabint               DW 10 DUP(?)  <span class="cmt">; tableau</span>
+    _OUT_BUF             DB 12 DUP(?), '$'
+<span class="lbl">DONNEE ENDS</span>
+
+<span class="lbl">LECODE SEGMENT</span>               <span class="cmt">; Segment de code</span>
+    <span class="cmt">; ... procédures _PRINT_INT, _READ_INT ...</span>
+<span class="lbl">Debut:</span>
+    ASSUME CS:LECODE, DS:DONNEE, SS:PILE
+    MOV AX, DONNEE
+    MOV DS, AX          <span class="cmt">; initialiser DS</span>
+    MOV AX, PILE
+    MOV SS, AX          <span class="cmt">; initialiser SS</span>
+    MOV SP, base_pile
+    <span class="cmt">; ... quadruplets traduits ...</span>
+<span class="lbl">Lqc:</span>                          <span class="cmt">; label de fin</span>
+    MOV AH, 4Ch
+    INT 21h              <span class="cmt">; terminer le programme DOS</span>
+<span class="lbl">LECODE ENDS</span>
+END Debut</pre></div>
+  </div>
+
+  <!-- Fonctions utilitaires ASM -->
+  <h3 style="font-family:'Syne',sans-serif; font-size:20px; margin-bottom:20px; color:#fff;">Fonctions utilitaires (asm8086.c)</h3>
+  <div class="asm-grid" style="margin-bottom:40px;">
+
+    <div class="asm-card">
+      <div class="asm-card-header">🔢 nom_asm(s)</div>
+      <div class="asm-card-body">Convertit un nom de variable en identifiant ASM valide. Les temporaires <span class="inline-code">T5</span> deviennent <span class="inline-code">_T5</span> pour éviter les conflits avec les registres ou directives 8086.</div>
+      <div class="asm-card-code">
+        <div class="code-block" style="margin:0 16px 16px;">
+          <div class="code-body"><pre><span class="str">"T5"</span>  <span class="arr">→</span>  <span class="lbl">"_T5"</span>
+<span class="str">"i"</span>   <span class="arr">→</span>  <span class="lbl">"i"</span>
+<span class="str">"Tab"</span> <span class="arr">→</span>  <span class="lbl">"Tab"</span></pre></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="asm-card">
+      <div class="asm-card-header">📦 est_tableau_access(s, ntab, idx)</div>
+      <div class="asm-card-body">Détecte la forme <span class="inline-code">"Tab[indice]"</span> et extrait le nom du tableau et l'indice dans des buffers séparés. Retourne 1 si c'est un accès tableau.</div>
+      <div class="asm-card-code">
+        <div class="code-block" style="margin:0 16px 16px;">
+          <div class="code-body"><pre><span class="str">"Tabint[T5]"</span>
+  ntab = <span class="lbl">"Tabint"</span>
+  idx  = <span class="lbl">"T5"</span>
+  retour: 1</pre></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="asm-card">
+      <div class="asm-card-header">📥 charger_dans_reg(f, src, reg)</div>
+      <div class="asm-card-body">Charge la valeur de <span class="inline-code">src</span> dans <span class="inline-code">AX</span> ou <span class="inline-code">BX</span>. Trois cas : littéral numérique, accès tableau, variable/temporaire.</div>
+      <div class="asm-card-code">
+        <div class="code-block" style="margin:0 16px 16px;">
+          <div class="code-body"><pre><span class="cmt">; src = "42"  (nombre)</span>
+MOV AX, 42
+
+<span class="cmt">; src = "Tab[T5]"  (tableau)</span>
+MOV SI, _T5
+ADD SI, SI       <span class="cmt">; ×2 car DW = 2 octets</span>
+MOV AX, Tab[SI]
+
+<span class="cmt">; src = "x"  (variable)</span>
+MOV AX, x</pre></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="asm-card">
+      <div class="asm-card-header">📤 stocker_ax_dans(f, dst)</div>
+      <div class="asm-card-body">Stocke le contenu de <span class="inline-code">AX</span> dans la destination <span class="inline-code">dst</span>. Deux cas : accès tableau ou variable simple.</div>
+      <div class="asm-card-code">
+        <div class="code-block" style="margin:0 16px 16px;">
+          <div class="code-body"><pre><span class="cmt">; dst = "Tab[i]"</span>
+MOV SI, i
+ADD SI, SI
+MOV Tab[SI], AX
+
+<span class="cmt">; dst = "x"</span>
+MOV x, AX</pre></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Collecte symboles et données -->
+  <h3 style="font-family:'Syne',sans-serif; font-size:20px; margin-bottom:20px; color:#fff;">Segment de données — collecter_symboles() + emettre_segment_donnees()</h3>
+
+  <div class="code-block" style="margin-bottom:32px;">
+    <div class="code-header"><div class="dot" style="background:#f0a44a"></div>Deux sources de symboles</div>
+    <div class="code-body"><pre><span class="cmt">; Source 1 : Table des symboles (variables déclarées, constantes, tableaux)</span>
+<span class="kw">for</span> (i = 0; i < HASH_SIZE; i++) {
+    NoeudTS *n = hashTable[i];
+    <span class="kw">while</span> (n) {
+        <span class="cmt">// TABLEAU → DW taille DUP(?)</span>
+        <span class="cmt">// CONST/var avec valeur → DW valeur</span>
+        <span class="cmt">// var sans valeur → DW ?</span>
+    }
+}
+
+<span class="cmt">; Source 2 : Quadruplets (temporaires T0, T1, ... et indices)</span>
+<span class="kw">for</span> (i = 0; i < qc; i++) {
+    <span class="cmt">// si champ commence par T + chiffre → DW ?</span>
+}
+
+<span class="cmt">; Résultat dans le fichier .asm</span>
+<span class="lbl">DONNEE SEGMENT</span>
+    x                    DW ?
+    MAX                  DW 100          <span class="cmt">← constante initialisée</span>
+    Tabint               DW 10 DUP(?)   <span class="cmt">← tableau de 10 éléments</span>
+    pi                   DW 3   <span class="cmt">← float tronqué (val orig: 3.141590)</span>  ←FIX
+    _T5                  DW ?           <span class="cmt">← temporaire</span>
+    _OUT_BUF             DB 12 DUP(?), '$'
+<span class="lbl">DONNEE ENDS</span></pre></div>
+  </div>
+
+  <!-- Procédures -->
+  <h3 style="font-family:'Syne',sans-serif; font-size:20px; margin-bottom:20px; color:#fff;">Procédures d'entrée/sortie</h3>
+  <div class="asm-grid" style="margin-bottom:40px;">
+
+    <div class="asm-card">
+      <div class="asm-card-header">🖨️ _PRINT_INT (emettre_proc_print)</div>
+      <div class="asm-card-body">
+        Affiche la valeur entière dans <span class="inline-code">AX</span> en décimal via DOS INT 21h. Algorithme :<br>
+        1. Si AX &lt; 0 : afficher '<span class="inline-code">-</span>' puis NEG AX<br>
+        2. Diviser par 10 en boucle, empiler les restes (chiffres en ordre inverse)<br>
+        3. Dépiler et afficher chaque chiffre avec <span class="inline-code">INT 21h / AH=02h</span><br>
+        4. Terminer le buffer avec <span class="inline-code">'$'</span> et appeler <span class="inline-code">INT 21h / AH=09h</span>
+      </div>
+    </div>
+
+    <div class="asm-card">
+      <div class="asm-card-header">⌨️ _READ_INT (emettre_proc_input)</div>
+      <div class="asm-card-body">
+        Lit un entier depuis le clavier caractère par caractère via <span class="inline-code">INT 21h / AH=01h</span>. Algorithme :<br>
+        1. Accumulateur BX = 0, signe CX = 0<br>
+        2. Si premier char est '<span class="inline-code">-</span>' : CX = 1<br>
+        3. Pour chaque chiffre : BX = BX*10 + (char - '0')<br>
+        4. À Entrée (0Dh) : AX = BX, si CX=1 → NEG AX
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Traduction quadruplets -->
+  <h3 style="font-family:'Syne',sans-serif; font-size:20px; margin-bottom:20px; color:#fff;">Traduction des quadruplets — traduire_quadruplet()</h3>
+
+  <div class="code-block" style="margin-bottom:24px;">
+    <div class="code-header"><div class="dot" style="background:#4af0a4"></div>Affectation simple — (:=, a, , res)</div>
+    <div class="code-body"><pre><span class="cmt">; Quadruplet : (:=, x, , T5)</span>
+charger_dans_reg(f, <span class="str">"x"</span>, <span class="str">"AX"</span>);   <span class="cmt">→  MOV AX, x</span>
+stocker_ax_dans(f, <span class="str">"T5"</span>);        <span class="cmt">→  MOV _T5, AX</span></pre></div>
+  </div>
+
+  <div class="code-block" style="margin-bottom:24px;">
+    <div class="code-header"><div class="dot" style="background:#4a9ef0"></div>Addition / Soustraction — (+, a, b, res) ou (-, a, b, res)</div>
+    <div class="code-body"><pre><span class="cmt">; Quadruplet : (+, i, 1, T6)</span>
+MOV AX, i       <span class="cmt">← charger a dans AX</span>
+ADD AX, 1       <span class="cmt">← si b est un nombre : ADD AX, valeur directe</span>
+MOV _T6, AX    <span class="cmt">← stocker le résultat</span>
+
+<span class="cmt">; Quadruplet : (+, x, y, T7)  (b = variable)</span>
+MOV AX, x
+MOV BX, y       <span class="cmt">← charger b dans BX</span>
+ADD AX, BX
+MOV _T7, AX</pre></div>
+  </div>
+
+  <div class="code-block" style="margin-bottom:24px;">
+    <div class="code-header"><div class="dot" style="background:#a44af0"></div>Multiplication / Division — (*, a, b, res) ou (/, a, b, res)</div>
+    <div class="code-body"><pre><span class="cmt">; Quadruplet : (*, a, b, T8)</span>
+MOV AX, a
+MOV BX, b       <span class="cmt">← ou : MOV BX, valeur  si b est un nombre</span>
+IMUL BX         <span class="cmt">← résultat dans DX:AX (on garde AX)</span>
+MOV _T8, AX
+
+<span class="cmt">; Quadruplet : (/, a, b, T9)</span>
+MOV AX, a
+CWD             <span class="cmt">← étendre AX vers DX:AX (signe)</span>
+MOV BX, b
+IDIV BX         <span class="cmt">← quotient dans AX, reste dans DX</span>
+MOV _T9, AX
+
+<span class="cmt">; CAS SPÉCIAL FIX — multiplication par flottant n.5 (ex: 1.5)</span>
+<span class="cmt">; x * 1.5  →  x * 3 / 2</span>
+MOV AX, x
+MOV BX, 3       <span class="cmt">← 2*1 + 1 = 3</span>
+IMUL BX
+SAR AX, 1       <span class="cmt">← division entière par 2 (shift arithmétique)</span>
+MOV _T8, AX</pre></div>
+  </div>
+
+  <div class="code-block" style="margin-bottom:24px;">
+    <div class="code-header"><div class="dot" style="background:#f05a4a"></div>Comparaisons — (==, !=, &lt;, &gt;, &lt;=, &gt;=, a, b, res)</div>
+    <div class="code-body"><pre><span class="cmt">; Quadruplet : (<=, i, 10, T21)</span>
+<span class="cmt">; Stratégie : évaluer → 0 (faux) ou 1 (vrai)</span>
+MOV AX, i
+CMP AX, 10         <span class="cmt">← comparer</span>
+JLE _CMP7_V        <span class="cmt">← si i<=10 : sauter au label "vrai"</span>
+MOV _T21, 0        <span class="cmt">← résultat = faux</span>
+JMP _CMP7_S
+<span class="lbl">_CMP7_V:</span>
+MOV _T21, 1        <span class="cmt">← résultat = vrai</span>
+<span class="lbl">_CMP7_S:</span>
+
+<span class="cmt">; Table opérateur → mnémonique de saut</span>
+<span class="cmt">; ==  →  JE    |  !=  →  JNE</span>
+<span class="cmt">; &lt;   →  JL    |  &gt;   →  JG</span>
+<span class="cmt">; &lt;=  →  JLE   |  &gt;=  →  JGE</span></pre></div>
+  </div>
+
+  <div class="code-block" style="margin-bottom:24px;">
+    <div class="code-header"><div class="dot" style="background:#f0a44a"></div>Sauts conditionnels et inconditionnels — BZ et BR</div>
+    <div class="code-body"><pre><span class="cmt">; Quadruplet : (BZ, T21, , 15)  — sauter si T21 == 0</span>
+MOV AX, _T21
+CMP AX, 0
+JE  L15            <span class="cmt">← label généré : "L" + indice cible</span>
+
+<span class="cmt">; Quadruplet : (BR, , , 5)  — saut inconditionnel</span>
+JMP L5
+
+<span class="cmt">; Les labels sont posés au bon endroit grâce à marquer_cibles()</span>
+<span class="cmt">; qui scanne tous les BZ/BR avant la traduction</span>
+<span class="lbl">L5:</span>
+    ; [5] (+, i, 1, T6)
+    ...</pre></div>
+  </div>
+
+  <div class="code-block" style="margin-bottom:24px;">
+    <div class="code-header"><div class="dot" style="background:#4af0a4"></div>Affichage (out) et lecture (input)</div>
+    <div class="code-body"><pre><span class="cmt">; Quadruplet : (out, "Bonjour", , )  — chaine littérale</span>
+<span class="cmt">; Chaque caractère affiché un par un via INT 21h / AH=02h</span>
+MOV AH, 02h  ;  'B'
+MOV DL, 66
+INT 21h
+MOV AH, 02h  ;  'o'
+MOV DL, 111
+INT 21h
+... (etc.)
+<span class="cmt">; \n → emit_newline() → MOV DL, 0Ah + INT 21h</span>
+
+<span class="cmt">; Quadruplet : (out, x, , )  — variable</span>
+MOV AX, x
+CALL _PRINT_INT    <span class="cmt">← appel procédure d'affichage</span>
+MOV AH, 02h        <span class="cmt">← saut de ligne après variable</span>
+MOV DL, 0Ah
+INT 21h
+
+<span class="cmt">; Quadruplet : (input, , , x)</span>
+CALL _READ_INT     <span class="cmt">← résultat dans AX</span>
+MOV x, AX</pre></div>
+  </div>
+
+  <div class="code-block" style="margin-bottom:24px;">
+    <div class="code-header"><div class="dot" style="background:#a44af0"></div>Accès tableau — (TAB, Tabint, i, res)</div>
+    <div class="code-body"><pre><span class="cmt">; Quadruplet : (TAB, Tabint, i, T10)</span>
+<span class="cmt">; Chaque élément fait 2 octets (DW) → index × 2</span>
+MOV SI, i          <span class="cmt">← charger l'indice</span>
+ADD SI, SI         <span class="cmt">← SI = i × 2</span>
+MOV AX, Tabint[SI] <span class="cmt">← lire l'élément</span>
+MOV _T10, AX       <span class="cmt">← stocker dans le temporaire</span>
+
+<span class="cmt">; Quadruplet d'écriture : (:=, val, , Tabint[i])</span>
+<span class="cmt">; Géré par stocker_ax_dans avec est_tableau_access</span>
+MOV SI, i
+ADD SI, SI
+MOV Tabint[SI], AX</pre></div>
+  </div>
+
+</div>
+</section>
+
+
+<!-- POINT D'ENTRÉE -->
+<section id="entrypoint">
+<div class="container">
+  <div class="section-badge badge-asm">generer_asm()</div>
+  <h2>Point d'entrée de la génération</h2>
+  <p class="lead">La fonction <span class="inline-code">generer_asm(nom_fichier)</span> orchestre toute la génération en appelant les sous-fonctions dans le bon ordre.</p>
+
+  <div class="code-block" style="margin-bottom:32px;">
+    <div class="code-header"><div class="dot" style="background:#f0a44a"></div>Séquence d'appels dans generer_asm()</div>
+    <div class="code-body"><pre><span class="kw">void</span> generer_asm(<span class="kw">const char</span> *nom_fichier) {
+    FILE *f = fopen(nom_fichier, <span class="str">"w"</span>);
+
+    <span class="num">1.</span> collecter_symboles();         <span class="cmt">← scanner TS + quadruplets</span>
+
+    <span class="cmt">; En-tête + segments pile et données</span>
+    <span class="num">2.</span> EMIT(<span class="str">"PILE SEGMENT STACK ..."</span>);
+    <span class="num">3.</span> emettre_segment_donnees(f);   <span class="cmt">← toutes les variables en DW</span>
+
+    <span class="cmt">; Segment de code</span>
+    <span class="num">4.</span> emettre_proc_print(f);        <span class="cmt">← procédure _PRINT_INT</span>
+    <span class="num">5.</span> emettre_proc_input(f);        <span class="cmt">← procédure _READ_INT</span>
+
+    <span class="cmt">; Initialisation DOS (registres de segments)</span>
+    <span class="num">6.</span> EMIT(<span class="str">"Debut: ..."</span>);
+
+    <span class="cmt">; Marquage des cibles de saut</span>
+    <span class="num">7.</span> marquer_cibles(marque);        <span class="cmt">← tableau de flags</span>
+
+    <span class="cmt">; Traduction de chaque quadruplet</span>
+    <span class="num">8.</span> <span class="kw">for</span> (i = 0; i < qc; i++)
+           traduire_quadruplet(f, i, marque);
+
+    <span class="cmt">; Fin du programme</span>
+    <span class="num">9.</span> EMIT(<span class="str">"L%d:"</span>, qc);              <span class="cmt">← label de fin</span>
+       EMIT(<span class="str">"MOV AH, 4Ch"</span>);
+       EMIT(<span class="str">"INT 21h"</span>);               <span class="cmt">← terminaison DOS</span>
+
+    fclose(f);
+}</pre></div>
+  </div>
+
+  <div class="alert alert-info">
+    <span class="alert-icon">🏷️</span>
+    <div><strong>marquer_cibles(marque) :</strong> Avant de traduire, on scanne tous les BZ/BR pour identifier leurs cibles et poser un label (<span class="inline-code">L5:</span>, <span class="inline-code">L12:</span>...) au bon endroit. Le quad d'index 0 est toujours marqué (début du programme). Sans ce pré-scan, les labels seraient posés après le saut et non avant.</div>
+  </div>
+
+  <!-- Récap final -->
+  <hr class="divider" style="margin-top:40px;">
+  <h3 style="font-family:'Syne',sans-serif; font-size:18px; margin: 28px 0 16px; color:#fff;">Tableau récapitulatif — Quadruplet → ASM</h3>
+  <table>
+    <tr>
+      <th>Quadruplet</th>
+      <th>Instructions 8086 générées</th>
+      <th>Note</th>
+    </tr>
+    <tr>
+      <td>(:=, a, , res)</td>
+      <td>MOV AX, a<br>MOV res, AX</td>
+      <td>Affectation simple</td>
+    </tr>
+    <tr>
+      <td>(+, a, b, res)</td>
+      <td>MOV AX, a<br>ADD AX, b<br>MOV res, AX</td>
+      <td>b peut être immédiat</td>
+    </tr>
+    <tr>
+      <td>(-, a, b, res)</td>
+      <td>MOV AX, a<br>SUB AX, b<br>MOV res, AX</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>(*, a, b, res)</td>
+      <td>MOV AX, a<br>MOV BX, b<br>IMUL BX<br>MOV res, AX</td>
+      <td>Cas spécial n.5 avec SAR</td>
+    </tr>
+    <tr>
+      <td>(/, a, b, res)</td>
+      <td>MOV AX, a<br>CWD<br>MOV BX, b<br>IDIV BX<br>MOV res, AX</td>
+      <td>CWD pour signe</td>
+    </tr>
+    <tr>
+      <td>(NEG, a, , res)</td>
+      <td>MOV AX, a<br>NEG AX<br>MOV res, AX</td>
+      <td>Négation unaire</td>
+    </tr>
+    <tr>
+      <td>(==, a, b, res)<br>(!=, &lt;, &gt;, &lt;=, &gt;=)</td>
+      <td>MOV AX, a<br>CMP AX, b<br>Jcond _CMP_V<br>MOV res, 0 / JMP / MOV res, 1</td>
+      <td>0 ou 1 dans res</td>
+    </tr>
+    <tr>
+      <td>(BZ, cond, , cible)</td>
+      <td>MOV AX, cond<br>CMP AX, 0<br>JE Lcible</td>
+      <td>Saut si zéro</td>
+    </tr>
+    <tr>
+      <td>(BR, , , cible)</td>
+      <td>JMP Lcible</td>
+      <td>Saut inconditionnel</td>
+    </tr>
+    <tr>
+      <td>(TAB, tab, idx, res)</td>
+      <td>MOV SI, idx<br>ADD SI, SI<br>MOV AX, tab[SI]<br>MOV res, AX</td>
+      <td>×2 car DW = 2 octets</td>
+    </tr>
+    <tr>
+      <td>(out, "str", , )</td>
+      <td>MOV AH,02h / MOV DL,'c' / INT 21h (×N)</td>
+      <td>Char par char, \n → 0Ah</td>
+    </tr>
+    <tr>
+      <td>(out, var, , )</td>
+      <td>MOV AX, var<br>CALL _PRINT_INT<br>+ saut de ligne</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>(input, , , res)</td>
+      <td>CALL _READ_INT<br>MOV res, AX</td>
+      <td>Lecture clavier</td>
+    </tr>
+    <tr>
+      <td>(AND/OR, a, b, res)</td>
+      <td>MOV AX, a<br>MOV BX, b<br>AND/OR AX, BX<br>MOV res, AX</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>(NON, a, , res)</td>
+      <td>CMP AX,0 / JE / MOV 0 / JMP / MOV 1</td>
+      <td>NOT logique : 0→1, sinon→0</td>
+    </tr>
+    <tr>
+      <td>(NOP, , , )</td>
+      <td><em>rien</em></td>
+      <td>Ignoré silencieusement</td>
+    </tr>
+  </table>
+
+</div>
+</section>
+
+<footer>
+  <div>Documentation générée à partir de <span style="color:var(--accent)">opt.c</span> &amp; <span style="color:var(--accent2)">asm8086.c</span> · Compilateur ProLang · 2024</div>
+</footer>
+
+</body>
+</html>
