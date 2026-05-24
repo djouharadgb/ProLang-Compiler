@@ -1,0 +1,265 @@
+=== QUADRUPLETS OPTIMISÉS ===
+
+─────────────────────────────────────────
+Quad 2  Passe 7 (élimination variable morte) :
+Pi jamais lu après substitution
+
+AVANT :
+(:=, 3.141590, , Pi)
+
+APRÈS :
+(supprimé)
+
+─────────────────────────────────────────
+Quad 3  Passe 7 (élimination variable morte) :
+Max jamais lu après substitution
+
+AVANT :
+(:=, 100, , Max)
+
+APRÈS :
+(supprimé)
+
+─────────────────────────────────────────
+Quad 8  Passe 1 (propagation de constante symbolique) :
+Pi remplacé par 3.141590
+
+AVANT :
+(+, a, Pi, T0)
+
+APRÈS :
+(+, a, 3.141590, T0)
+
+─────────────────────────────────────────
+Quad 9  Passe 2 (simplification algébrique) :
+T0 * 2 → T0 + T0
+
+AVANT :
+(*, T0, 2.000000, T1)
+
+APRÈS :
+(+, T0, T0, T1)
+
+─────────────────────────────────────────
+Quad 9+10  Passe 5 (propagation d'expression) :
+T1 utilisé une seule fois → résultat direct dans b
+
+AVANT :
+(*, T0, 2.000000, T1)
+(:=, T1, , b)
+
+APRÈS :
+(+, T0, T0, b)
+(supprimé)
+
+─────────────────────────────────────────
+Quad 11+13  Passe 5 (propagation d'expression) :
+T3 utilisé une seule fois → résultat direct dans Tabint[0]
+
+AVANT :
+(+, x, T2, T3)
+(:=, T3, , Tabint[0])
+
+APRÈS :
+(+, x, T2, Tabint[0])
+(supprimé)
+
+─────────────────────────────────────────
+Quad 14+16  Passe 5 (propagation d'expression) :
+T5 utilisé une seule fois → résultat direct dans Tabfloat[1]
+
+AVANT :
+(/, T4, 2.000000, T5)
+(:=, T5, , Tabfloat[1])
+
+APRÈS :
+(/, T4, 2.000000, Tabfloat[1])
+(supprimé)
+
+─────────────────────────────────────────
+Quad 26+27  Passe 5 (propagation d'expression) :
+T14 utilisé une seule fois → résultat direct dans somme
+
+AVANT :
+(+, T13, z, T14)
+(:=, T14, , somme)
+
+APRÈS :
+(+, T13, z, somme)
+(supprimé)
+
+─────────────────────────────────────────
+Quad 32+33  Passe 5 (propagation d'expression) :
+T17 utilisé une seule fois → résultat direct dans Tabint[i]
+
+AVANT :
+(+, T16, i, T17)
+(:=, T17, , Tabint[i])
+
+APRÈS :
+(+, T16, i, Tabint[i])
+(supprimé)
+
+─────────────────────────────────────────
+Quad 40+41  Passe 5 (propagation d'expression) :
+T23 utilisé une seule fois → résultat direct dans Tabfloat[i]
+
+AVANT :
+(*, T22, 1.500000, T23)
+(:=, T23, , Tabfloat[i])
+
+APRÈS :
+(*, T22, 1.500000, Tabfloat[i])
+(supprimé)
+
+─────────────────────────────────────────
+Quad 44+45  Passe 5 (propagation d'expression) :
+T25 utilisé une seule fois → résultat direct dans Tabfloat[i]
+
+AVANT :
+(/, T24, 2.000000, T25)
+(:=, T25, , Tabfloat[i])
+
+APRÈS :
+(/, T24, 2.000000, Tabfloat[i])
+(supprimé)
+
+─────────────────────────────────────────
+Quad 46+47  Passe 5 (propagation d'expression) :
+T26 utilisé une seule fois → résultat direct dans i
+
+AVANT :
+(+, i, 1, T26)
+(:=, T26, , i)
+
+APRÈS :
+(+, i, 1, i)
+(supprimé)
+
+─────────────────────────────────────────
+Quad 51  Passe 1 (propagation de constante symbolique) :
+Max remplacé par 100
+
+AVANT :
+(<=, x, Max, T27)
+
+APRÈS :
+(<=, x, 100, T27)
+
+─────────────────────────────────────────
+Quad 57+58  Passe 5 (propagation d'expression) :
+T32 utilisé une seule fois → résultat direct dans x
+
+AVANT :
+(+, x, 1, T32)
+(:=, T32, , x)
+
+APRÈS :
+(+, x, 1, x)
+(supprimé)
+
+─────────────────────────────────────────
+Quad 62+63  Passe 5 (propagation d'expression) :
+T35 utilisé une seule fois → résultat direct dans y
+
+AVANT :
+(+, y, 1, T35)
+(:=, y, , y)
+
+APRÈS :
+(+, y, 1, y)
+(supprimé)
+
+─────────────────────────────────────────
+Quad 80+81  Passe 5 (propagation d'expression) :
+T47 utilisé une seule fois → résultat direct dans Tabfloat[j]
+
+AVANT :
+(/, T46, 2.000000, T47)
+(:=, T47, , Tabfloat[j])
+
+APRÈS :
+(/, T46, 2.000000, Tabfloat[j])
+(supprimé)
+
+─────────────────────────────────────────
+Quad 83+84  Passe 5 (propagation d'expression) :
+T49 utilisé une seule fois → résultat direct dans moyenne
+
+AVANT :
+(+, moyenne, T48, T49)
+(:=, T49, , moyenne)
+
+APRÈS :
+(+, moyenne, T48, moyenne)
+(supprimé)
+
+─────────────────────────────────────────
+Quad 85+86  Passe 5 (propagation d'expression) :
+T50 utilisé une seule fois → résultat direct dans j
+
+AVANT :
+(+, j, 1, T50)
+(:=, T50, , j)
+
+APRÈS :
+(+, j, 1, j)
+(supprimé)
+
+─────────────────────────────────────────
+Quad 88+89  Passe 5 (propagation d'expression) :
+T51 utilisé une seule fois → résultat direct dans moyenne
+
+AVANT :
+(/, moyenne, 20.000000, T51)
+(:=, T51, , moyenne)
+
+APRÈS :
+(/, moyenne, 20.000000, moyenne)
+(supprimé)
+
+─────────────────────────────────────────
+Passe 8 (remappage des sauts) :
+Après suppression de 17 quads, toutes les cibles BZ/BR recalculées
+
+Quad 24 BZ T12  : cible 50 → 40
+Quad 30 BZ T15  : cible 49 → 39
+Quad 38 BZ T21  : cible 43 → 35
+Quad 42 BR      : cible 46 → 37
+Quad 48 BR      : cible 29 → 23
+Quad 49 BR      : cible 51 → 41
+Quad 56 BZ T31  : cible 73 → 60
+Quad 61 BZ T34  : cible 72 → 59
+Quad 71 BR      : cible 59 → 48
+Quad 72 BR      : cible 51 → 41
+Quad 75 BZ T42  : cible 88 → 72
+Quad 87 BR      : cible 74 → 61
+
+
+Quad 35  Passe 6 (élimination expression redondante / CSE) :
+TAB Tabint[i] déjà calculé au quad 31 dans T16
+
+AVANT :
+35 - (TAB, Tabint, i, T19)
+36 - (>, T19, 10, T20)
+
+APRÈS :
+28 - (>, T16, 10, T20)   ← T19 supprimé, T16 réutilisé directement
+
+
+Quad 82  Passe 6 (élimination expression redondante / CSE) :
+TAB Tabfloat[j] déjà calculé au quad 78 dans T45
+
+AVANT :
+78 - (TAB, Tabfloat, j, T45)
+79 - (+, T44, T45, T46)
+80 - (/, T46, 2.000000, T47)
+81 - (:=, T47, , Tabfloat[j])
+82 - (TAB, Tabfloat, j, T48)   ← REDONDANT, même Tabfloat[j]
+83 - (+, moyenne, T48, T49)
+
+APRÈS :
+64 - (TAB, Tabfloat, j, T45)
+65 - (+, T44, T45, T46)
+66 - (/, T46, 2.000000, Tabfloat[j])
+67 - (+, moyenne, T45, moyenne)   ← T48 supprimé, T45 réutilisé directement

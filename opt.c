@@ -11,10 +11,9 @@
 #define YLW  "\033[1;33m"
 #define RESET "\033[0m"
 
-
-/* =========================================================================
+/* 
    UTILITAIRES INTERNES
-   ========================================================================= */
+ */
 
 /*
  est_nombre : verifie si la chaine s represente un nombre valide
@@ -391,6 +390,58 @@ static int simplification_constantes_chainees(void)
 }
 
 
+/*
+     PASSE 4 : FUSION TEMPORAIRE -> DESTINATION
+
+     Principe : si un temporaire T est calcule puis immediatement
+     recopie vers une destination, on remplace la destination du
+     calcul par la destination finale et on supprime la copie.
+
+     Pattern :
+         quad[i]   :  T = expr
+         quad[i+1] :  dst := T
+     =>
+         quad[i]   :  dst = expr
+         quad[i+1] :  NOP
+
+     On ne fusionne pas si quad[i+1] est cible d'un saut.
+*/
+static int fusion_temp_affectation(void)
+{
+        int modifie = 0, i;
+        int cible[MAX_QUADS];
+        memset(cible, 0, sizeof(cible));
+
+        for (i = 0; i < qc; i++) {
+                if (!est_saut(quad[i].oper)) continue;
+                int t = atoi(quad[i].res);
+                if (t >= 0 && t < qc) cible[t] = 1;
+        }
+
+        for (i = 0; i < qc - 1; i++) {
+                if (cible[i + 1]) continue;
+                if (strcmp(quad[i + 1].oper, ":=") != 0) continue;
+                if (quad[i + 1].op2[0] != '\0') continue;
+
+                const char *tmp = quad[i + 1].op1;
+                if (!est_temporaire(tmp)) continue;
+                if (strcmp(quad[i].res, tmp) != 0) continue;
+                if (compter_utilisations(tmp) != 1) continue;
+                if (est_utilise_comme_index(tmp)) continue;
+                if (a_effet_de_bord(i) || a_effet_de_bord(i + 1)) continue;
+
+                /* Fusionner vers la destination finale */
+                strcpy(quad[i].res, quad[i + 1].res);
+                strcpy(quad[i + 1].oper, "NOP");
+                strcpy(quad[i + 1].op1,  "");
+                strcpy(quad[i + 1].op2,  "");
+                strcpy(quad[i + 1].res,  "");
+                modifie = 1;
+        }
+        return modifie;
+}
+
+
 /* 
    PASSE 4 : PROPAGATION DE COPIE
 
@@ -534,8 +585,15 @@ static int elimination_expressions_redondantes(void)
         int est_comp  = strcmp(op,"==")==0 || strcmp(op,"!=")==0
                      || strcmp(op,"<=")==0 || strcmp(op,">=")==0
                      || strcmp(op,"<") ==0 || strcmp(op,">") ==0;
+        /* FIX CSE : inclure les lectures de tableau (TAB) dans la CSE.
+           TAB Tabint[i] recalcule plusieurs fois avec le meme indice
+           dans le meme bloc de base => redondant, on peut reutiliser
+           le premier resultat.
+           ATTENTION : une ecriture tableau (:=, val, , Tab[idx]) invalide
+           toutes les entrees TAB de ce tableau dans la table. */
+        int est_tab   = strcmp(op,"TAB") == 0;
 
-        if (est_arith || est_comp) {
+        if (est_arith || est_comp || est_tab) {
             /* Chercher si cette expression est deja dans la table */
             int idx_trouve = -1;
             for (k = 0; k < nb_expr; k++) {
@@ -582,10 +640,27 @@ static int elimination_expressions_redondantes(void)
         } else if (strcmp(op, ":=") == 0) {
             /* Une affectation peut changer la valeur de res :
                invalider toutes les expressions qui en dependent */
+
+            /* FIX CSE tableaux : si res est un acces tableau "Tab[idx]",
+               invalider toutes les entrees TAB dont l'operande1 est ce
+               meme tableau de base. Ex: Tabint[i] := val invalide toutes
+               les entrees TAB de Tabint dans la table CSE, car on ne sait
+               plus si la valeur lue sera la meme apres ecriture. */
+            char base_res_buf[100];
+            const char *base_res = nom_base_tableau(res, base_res_buf);
+            int res_est_tableau = (base_res != res);
+
             for (k = 0; k < nb_expr; ) {
+                int invalider = 0;
                 if (strcmp(table_expr[k].resultat,  res) == 0
                  || strcmp(table_expr[k].operande1, res) == 0
-                 || strcmp(table_expr[k].operande2, res) == 0) {
+                 || strcmp(table_expr[k].operande2, res) == 0)
+                    invalider = 1;
+                if (!invalider && res_est_tableau
+                 && strcmp(table_expr[k].operateur, "TAB") == 0
+                 && strcmp(table_expr[k].operande1, base_res) == 0)
+                    invalider = 1;
+                if (invalider) {
                     memmove(&table_expr[k], &table_expr[k+1],
                             (nb_expr - k - 1) * sizeof(ExpressionDisponible));
                     nb_expr--;
@@ -665,7 +740,7 @@ static int elimination_variables_mortes(void)
 }
 
 
-/* =========================================================================
+/* 
    PASSE 8 : ELIMINATION DE CODE INUTILE + REMAPPAGE DES SAUTS
 
    Principe : supprimer les quadruplets dont le calcul n'a
@@ -796,7 +871,7 @@ void optimiser_quadruplets(void)
     int modifie, iterations = 0;
 
     printf(CYN "\n============================================================\n" RESET);
-    printf(CYN " OPTIMISATION DU CODE INTERMEDIAIRE (8 passes)\n" RESET);
+    printf(CYN " OPTIMISATION DU CODE INTERMEDIAIRE (9 passes)\n" RESET);
     printf(CYN "============================================================\n" RESET);
 
     do {
@@ -810,26 +885,29 @@ void optimiser_quadruplets(void)
            (FIX : ne pas fusionner si le temporaire est un indice tableau) */
         modifie |= simplification_constantes_chainees();
 
-        /* Passe 4 : propager les copies (dst:=src => remplacer dst par src) */
+        /* Passe 4 : fusionner T calcule + affectation immediate */
+        modifie |= fusion_temp_affectation();
+
+        /* Passe 5 : propager les copies (dst:=src => remplacer dst par src) */
         modifie |= propagation_copie();
 
-        /* Passe 5 : propager les expressions a usage unique vers leur site
+          /* Passe 6 : propager les expressions a usage unique vers leur site
            (FIX : ne pas propager si le temporaire est un indice tableau) */
         modifie |= propagation_expression();
 
-        /* Passe 6 : eliminer les recalculs d'expressions deja disponibles */
+        /* Passe 7 : eliminer les recalculs d'expressions deja disponibles */
         modifie |= elimination_expressions_redondantes();
 
-        /* Passe 7 : supprimer les variables utilisateur jamais lues
+          /* Passe 8 : supprimer les variables utilisateur jamais lues
            (FIX tableaux : compare le nom de base, pas "Tab[i]") */
         modifie |= elimination_variables_mortes();
 
-        /* Passe 8 : supprimer les NOP et les calculs morts + corriger sauts
+          /* Passe 9 : supprimer les NOP et les calculs morts + corriger sauts
            (FIX remappage BZ/BR + FIX BR vers instruction suivante) */
         modifie |= elimination_code_inutile();
 
         iterations++;
     } while (modifie && iterations < 30);
 
-    printf(GRN "[Optimisation terminee en %d iteration(s), 8 passes]\n" RESET, iterations);
+    printf(GRN "[Optimisation terminee en %d iteration(s), 9 passes]\n" RESET, iterations);
 }

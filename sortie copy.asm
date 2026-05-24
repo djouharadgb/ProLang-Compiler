@@ -36,6 +36,7 @@ DONNEE SEGMENT
     _T15                 DW ?          ; temporaire
     _T16                 DW ?          ; temporaire
     _T18                 DW ?          ; temporaire
+    _T19                 DW ?          ; temporaire
     _T20                 DW ?          ; temporaire
     _T21                 DW ?          ; temporaire
     _T22                 DW ?          ; temporaire
@@ -57,6 +58,7 @@ DONNEE SEGMENT
     _T44                 DW ?          ; temporaire
     _T45                 DW ?          ; temporaire
     _T46                 DW ?          ; temporaire
+    _T48                 DW ?          ; temporaire
     _OUT_BUF             DB 12 DUP(?), '$'
 
 DONNEE ENDS
@@ -330,10 +332,10 @@ _NON17_F:
     OR AX, BX
     MOV _T12, AX
 
-    ; [19] (BZ, T12, , 39)
+    ; [19] (BZ, T12, , 40)
     MOV AX, _T12
     CMP AX, 0
-    JE  L39
+    JE  L40
 
     ; [20] (+, x, y, T13)
     MOV AX, x
@@ -362,10 +364,10 @@ _CMP23_V:
     MOV _T15, 1
 _CMP23_S:
 
-    ; [24] (BZ, T15, , 38)
+    ; [24] (BZ, T15, , 39)
     MOV AX, _T15
     CMP AX, 0
-    JE  L38
+    JE  L39
 
     ; [25] (TAB, Tabint, i, T16)
     MOV SI, i
@@ -391,28 +393,34 @@ _CMP27_V:
     MOV _T18, 1
 _CMP27_S:
 
-    ; [28] (>, T16, 10, T20)
-    MOV AX, _T16
-    CMP AX, 10
-    JG _CMP28_V
-    MOV _T20, 0
-    JMP _CMP28_S
-_CMP28_V:
-    MOV _T20, 1
-_CMP28_S:
+    ; [28] (TAB, Tabint, i, T19)
+    MOV SI, i
+    ADD SI, SI
+    MOV AX, Tabint[SI]
+    MOV _T19, AX
 
-    ; [29] (AND, T18, T20, T21)
+    ; [29] (>, T19, 10, T20)
+    MOV AX, _T19
+    CMP AX, 10
+    JG _CMP29_V
+    MOV _T20, 0
+    JMP _CMP29_S
+_CMP29_V:
+    MOV _T20, 1
+_CMP29_S:
+
+    ; [30] (AND, T18, T20, T21)
     MOV AX, _T18
     MOV BX, _T20
     AND AX, BX
     MOV _T21, AX
 
-    ; [30] (BZ, T21, , 34)
+    ; [31] (BZ, T21, , 35)
     MOV AX, _T21
     CMP AX, 0
-    JE  L34
+    JE  L35
 
-    ; [31] (TAB, Tabint, i, T22)
+    ; [32] (TAB, Tabint, i, T22)
     MOV SI, i
     ADD SI, SI
     MOV AX, Tabint[SI]
@@ -420,7 +428,7 @@ _CMP28_S:
     IMUL BX
     MOV _T22, AX
 
-    ; [32] (*, T22, 1.500000, Tabfloat[i])
+    ; [33] (*, T22, 1.500000, Tabfloat[i])
     MOV AX, _T22
     MOV BX, 150
     IMUL BX
@@ -430,11 +438,11 @@ _CMP28_S:
     ADD SI, SI
     MOV Tabfloat[SI], AX
 
-    ; [33] (BR, , , 36)
-    JMP L36
+    ; [34] (BR, , , 37)
+    JMP L37
 
-L34:
-    ; [34] (TAB, Tabint, i, T24)
+L35:
+    ; [35] (TAB, Tabint, i, T24)
     MOV SI, i
     ADD SI, SI
     MOV AX, Tabint[SI]
@@ -442,7 +450,7 @@ L34:
     IMUL BX
     MOV _T24, AX
 
-    ; [35] (/, T24, 2.000000, Tabfloat[i])
+    ; [36] (/, T24, 2.000000, Tabfloat[i])
     MOV AX, _T24
     MOV BX, 200
     MOV CX, 100
@@ -452,138 +460,138 @@ L34:
     ADD SI, SI
     MOV Tabfloat[SI], AX
 
-L36:
-    ; [36] (+, i, 1, i)
+L37:
+    ; [37] (+, i, 1, i)
     MOV AX, i
     ADD AX, 1
     MOV i, AX
 
-    ; [37] (BR, , , 23)
+    ; [38] (BR, , , 23)
     JMP L23
 
-L38:
-    ; [38] (BR, , , 40)
-    JMP L40
-
 L39:
-    ; [39] (:=, 0, , somme)
+    ; [39] (BR, , , 41)
+    JMP L41
+
+L40:
+    ; [40] (:=, 0, , somme)
     MOV AX, 0
     MOV somme, AX
 
-L40:
-    ; [40] (<=, x, 100, T27)
+L41:
+    ; [41] (<=, x, 100, T27)
     MOV AX, x
     CMP AX, 100
-    JLE _CMP40_V
+    JLE _CMP41_V
     MOV _T27, 0
-    JMP _CMP40_S
-_CMP40_V:
-    MOV _T27, 1
-_CMP40_S:
-
-    ; [41] (!=, y, 0, T28)
-    MOV AX, y
-    CMP AX, 0
-    JNE _CMP41_V
-    MOV _T28, 0
     JMP _CMP41_S
 _CMP41_V:
-    MOV _T28, 1
+    MOV _T27, 1
 _CMP41_S:
 
-    ; [42] (<, z, 10, T29)
-    MOV AX, z
-    CMP AX, 10
-    JL _CMP42_V
-    MOV _T29, 0
+    ; [42] (!=, y, 0, T28)
+    MOV AX, y
+    CMP AX, 0
+    JNE _CMP42_V
+    MOV _T28, 0
     JMP _CMP42_S
 _CMP42_V:
-    MOV _T29, 1
+    MOV _T28, 1
 _CMP42_S:
 
-    ; [43] (OR, T28, T29, T30)
+    ; [43] (<, z, 10, T29)
+    MOV AX, z
+    CMP AX, 10
+    JL _CMP43_V
+    MOV _T29, 0
+    JMP _CMP43_S
+_CMP43_V:
+    MOV _T29, 1
+_CMP43_S:
+
+    ; [44] (OR, T28, T29, T30)
     MOV AX, _T28
     MOV BX, _T29
     OR AX, BX
     MOV _T30, AX
 
-    ; [44] (AND, T27, T30, T31)
+    ; [45] (AND, T27, T30, T31)
     MOV AX, _T27
     MOV BX, _T30
     AND AX, BX
     MOV _T31, AX
 
-    ; [45] (BZ, T31, , 59)
+    ; [46] (BZ, T31, , 60)
     MOV AX, _T31
     CMP AX, 0
-    JE  L59
+    JE  L60
 
-    ; [46] (+, x, 1, x)
+    ; [47] (+, x, 1, x)
     MOV AX, x
     ADD AX, 1
     MOV x, AX
 
-L47:
-    ; [47] (==, x, y, T33)
+L48:
+    ; [48] (==, x, y, T33)
     MOV AX, x
     MOV BX, y
     CMP AX, BX
-    JE _CMP47_V
+    JE _CMP48_V
     MOV _T33, 0
-    JMP _CMP47_S
-_CMP47_V:
+    JMP _CMP48_S
+_CMP48_V:
     MOV _T33, 1
-_CMP47_S:
+_CMP48_S:
 
-    ; [48] (NON, T33, , T34)
+    ; [49] (NON, T33, , T34)
     MOV AX, _T33
     CMP AX, 0
-    JE  _NON48_U
+    JE  _NON49_U
     MOV AX, 0
-    JMP _NON48_F
-_NON48_U:
+    JMP _NON49_F
+_NON49_U:
     MOV AX, 1
-_NON48_F:
+_NON49_F:
     MOV _T34, AX
 
-    ; [49] (BZ, T34, , 58)
+    ; [50] (BZ, T34, , 59)
     MOV AX, _T34
     CMP AX, 0
-    JE  L58
+    JE  L59
 
-    ; [50] (+, y, 1, y)
+    ; [51] (+, y, 1, y)
     MOV AX, y
     ADD AX, 1
     MOV y, AX
 
-    ; [51] (+, x, 1, T36)
+    ; [52] (+, x, 1, T36)
     MOV AX, x
     ADD AX, 1
     MOV _T36, AX
 
-    ; [52] (TAB, Tabint, 0, T37)
+    ; [53] (TAB, Tabint, 0, T37)
     MOV SI, 0
     MOV AX, Tabint[SI]
     MOV _T37, AX
 
-    ; [53] (TAB, Tabint, 1, T38)
+    ; [54] (TAB, Tabint, 1, T38)
     MOV SI, 2
     MOV AX, Tabint[SI]
     MOV _T38, AX
 
-    ; [54] (+, T37, T38, T39)
+    ; [55] (+, T37, T38, T39)
     MOV AX, _T37
     MOV BX, _T38
     ADD AX, BX
     MOV _T39, AX
 
-    ; [55] (-, x, y, T40)
+    ; [56] (-, x, y, T40)
     MOV AX, x
     MOV BX, y
     SUB AX, BX
     MOV _T40, AX
 
-    ; [56] (*, T39, T40, Tabint[T36])
+    ; [57] (*, T39, T40, Tabint[T36])
     MOV AX, _T39
     MOV BX, _T40
     IMUL BX
@@ -591,58 +599,58 @@ _NON48_F:
     ADD SI, SI
     MOV Tabint[SI], AX
 
-    ; [57] (BR, , , 47)
-    JMP L47
-
-L58:
-    ; [58] (BR, , , 40)
-    JMP L40
+    ; [58] (BR, , , 48)
+    JMP L48
 
 L59:
-    ; [59] (:=, 1, , j)
+    ; [59] (BR, , , 41)
+    JMP L41
+
+L60:
+    ; [60] (:=, 1, , j)
     MOV AX, 1
     MOV j, AX
 
-L60:
-    ; [60] (<=, j, 20, T42)
+L61:
+    ; [61] (<=, j, 20, T42)
     MOV AX, j
     CMP AX, 20
-    JLE _CMP60_V
+    JLE _CMP61_V
     MOV _T42, 0
-    JMP _CMP60_S
-_CMP60_V:
+    JMP _CMP61_S
+_CMP61_V:
     MOV _T42, 1
-_CMP60_S:
+_CMP61_S:
 
-    ; [61] (BZ, T42, , 70)
+    ; [62] (BZ, T42, , 72)
     MOV AX, _T42
     CMP AX, 0
-    JE  L70
+    JE  L72
 
-    ; [62] (-, j, 1, T43)
+    ; [63] (-, j, 1, T43)
     MOV AX, j
     SUB AX, 1
     MOV _T43, AX
 
-    ; [63] (TAB, Tabfloat, T43, T44)
+    ; [64] (TAB, Tabfloat, T43, T44)
     MOV SI, _T43
     ADD SI, SI
     MOV AX, Tabfloat[SI]
     MOV _T44, AX
 
-    ; [64] (TAB, Tabfloat, j, T45)
+    ; [65] (TAB, Tabfloat, j, T45)
     MOV SI, j
     ADD SI, SI
     MOV AX, Tabfloat[SI]
     MOV _T45, AX
 
-    ; [65] (+, T44, T45, T46)
+    ; [66] (+, T44, T45, T46)
     MOV AX, _T44
     MOV BX, _T45
     ADD AX, BX
     MOV _T46, AX
 
-    ; [66] (/, T46, 2.000000, Tabfloat[j])
+    ; [67] (/, T46, 2.000000, Tabfloat[j])
     MOV AX, _T46
     MOV BX, 200
     MOV CX, 100
@@ -652,22 +660,28 @@ _CMP60_S:
     ADD SI, SI
     MOV Tabfloat[SI], AX
 
-    ; [67] (+, moyenne, T45, moyenne)
+    ; [68] (TAB, Tabfloat, j, T48)
+    MOV SI, j
+    ADD SI, SI
+    MOV AX, Tabfloat[SI]
+    MOV _T48, AX
+
+    ; [69] (+, moyenne, T48, moyenne)
     MOV AX, moyenne
-    MOV BX, _T45
+    MOV BX, _T48
     ADD AX, BX
     MOV moyenne, AX
 
-    ; [68] (+, j, 1, j)
+    ; [70] (+, j, 1, j)
     MOV AX, j
     ADD AX, 1
     MOV j, AX
 
-    ; [69] (BR, , , 60)
-    JMP L60
+    ; [71] (BR, , , 61)
+    JMP L61
 
-L70:
-    ; [70] (/, moyenne, 20.000000, moyenne)
+L72:
+    ; [72] (/, moyenne, 20.000000, moyenne)
     MOV AX, moyenne
     MOV BX, 2000
     MOV CX, 100
@@ -675,11 +689,11 @@ L70:
     IDIV BX
     MOV moyenne, AX
 
-    ; [71] (input, , , x)
+    ; [73] (input, , , x)
     CALL _READ_INT   ; resultat dans AX
     MOV x, AX
 
-    ; [72] (out, "Valeur finale de x: ", , )
+    ; [74] (out, "Valeur finale de x: ", , )
     MOV AH, 02h
     MOV DL, 86   ; 'V'
     INT 21h
@@ -741,14 +755,14 @@ L70:
     MOV DL, 32   ; ' '
     INT 21h
 
-    ; [73] (out, x, , )
+    ; [75] (out, x, , )
     MOV AX, x
     CALL _PRINT_INT
     MOV AH, 02h
     MOV DL, 0Ah
     INT 21h
 
-    ; [74] (out, "Somme: ", , )
+    ; [76] (out, "Somme: ", , )
     MOV AH, 02h
     MOV DL, 83   ; 'S'
     INT 21h
@@ -771,14 +785,14 @@ L70:
     MOV DL, 32   ; ' '
     INT 21h
 
-    ; [75] (out, somme, , )
+    ; [77] (out, somme, , )
     MOV AX, somme
     CALL _PRINT_INT
     MOV AH, 02h
     MOV DL, 0Ah
     INT 21h
 
-    ; [76] (out, "Moyenne: ", , )
+    ; [78] (out, "Moyenne: ", , )
     MOV AH, 02h
     MOV DL, 77   ; 'M'
     INT 21h
@@ -807,14 +821,14 @@ L70:
     MOV DL, 32   ; ' '
     INT 21h
 
-    ; [77] (out, moyenne, , )
+    ; [79] (out, moyenne, , )
     MOV AX, moyenne
     CALL _PRINT_FIXED
     MOV AH, 02h
     MOV DL, 0Ah
     INT 21h
 
-L78:
+L80:
     MOV AH, 4Ch
     INT 21h
 
