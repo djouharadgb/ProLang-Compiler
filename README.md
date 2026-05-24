@@ -44,7 +44,7 @@ EndProject ;
 
 ## Phases du compilateur
 
-### 1. Analyse lexicale — `prolang.l`
+### 1. Analyse lexicale : `prolang.l`
 
 Le fichier Flex parcourt le source caractere par caractere et produit les tokens transmis a Bison. Chaque regle tient a jour deux compteurs globaux `nb_ligne` et `nb_col` pour localiser precisement toute erreur.
 
@@ -54,7 +54,7 @@ Chaque mot-cle reconnu est insere dans la table des mots-cles (`tabM`). Chaque s
 
 Erreurs lexicales detectees, avec numero de ligne et colonne : identificateur commencant par un tiret bas, identificateur depassant 14 caracteres, identificateur se terminant par un tiret bas, identificateur contenant deux tirets bas consecutifs, constante reelle mal formee (chiffre manquant apres le point, ex: `3.`), constante entiere hors des bornes [-32768, 32767], caractere inconnu non reconnu par aucune regle.
 
-### 2. Analyse syntaxico-semantique — `Syn.y`
+### 2. Analyse syntaxico-semantique : `Syn.y`
 
 Le fichier Bison definit la grammaire complete du langage et declenche les actions semantiques integrees directement dans les regles de production.
 
@@ -66,7 +66,7 @@ Le compteur `semantic_errors` est incremente a chaque erreur semantique. La gene
 
 La generation des quadruplets a lieu directement dans les actions Bison, au moment ou chaque construction est reduite. Les branchements conditionnels (BZ) et inconditionnels (BR) sont emis avec backpatching : l'adresse cible est d'abord laissee vide puis mise a jour par `updateQuad` une fois la cible connue.
 
-### 3. Table des symboles — `ts.c`
+### 3. Table des symboles : `ts.c`
 
 La table des symboles est implementee sous forme de table de hachage ouverte (chaining) avec la fonction de hachage FNV-1 (Fowler-Noll-Vo, 32 bits). Chaque noeud contient le nom du symbole (max 14 caracteres), sa categorie (`IDF`, `CONST` ou `TABLEAU`), son type (`integer` ou `float`), sa valeur d'initialisation ou la taille du tableau, et un indicateur d'etat actif.
 
@@ -74,7 +74,7 @@ Trois tables distinctes sont gerees en parallele : la table de hachage principal
 
 Fonctions disponibles : insertion de variable, constante ou tableau, verification de double declaration et de declaration, verification d'initialisation, lecture et ecriture de la valeur, lecture du type, lecture de la taille d'un tableau. L'affichage final presente les trois tables sous forme de tableaux ASCII.
 
-### 4. Table des quadruplets — `quad.c`
+### 4. Table des quadruplets : `quad.c`
 
 Un quadruplet a la forme `(operateur, op1, op2, resultat)`. La table `quad[]` est un tableau statique de taille `MAX_QUADS`, le compteur global `qc` designant le prochain emplacement libre.
 
@@ -82,32 +82,32 @@ Un quadruplet a la forme `(operateur, op1, op2, resultat)`. La table `quad[]` es
 
 Operateurs utilises dans les quadruplets : `:=`, `+`, `-`, `*`, `/`, `NEG`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `AND`, `OR`, `NON`, `BZ`, `BR`, `TAB`, `input`, `out`, `NOP`.
 
-### 5. Optimiseur de code intermediaire — `opt.c`
+### 5. Optimiseur de code intermediaire : `opt.c`
 
 L'optimiseur applique plusieurs passes successives sur la table des quadruplets, repetees en boucle tant qu'au moins une modification est effectuee afin de propager les effets de chaque passe sur les suivantes.
 
-**Passe 1 — Propagation de constantes symboliques**
+**Passe 1 : Propagation de constantes symboliques**
 Les symboles declares `CONST` dans la table des symboles sont remplaces par leur valeur numerique dans les operandes des quadruplets. Exemple : avec `const MAX = 100`, toutes les occurrences de `MAX` en op1 ou op2 deviennent `100`.
 
-**Passe 2 — Simplification algebrique**
+**Passe 2 : Simplification algebrique**
 Regles appliquees sur chaque quadruplet : `X + 0` => `X`, `0 + X` => `X`, `X - 0` => `X`, `X - X` => `0`, `X * 0` => `0`, `X * 1` => `X`, `X * 2` => `X + X`, reduction de `X * 4` et `X * 8` en multiplications successives par 2, `X / 1` => `X`, `X / X` => `1`, et calcul direct a la compilation (constant folding) quand les deux operandes sont des constantes.
 
-**Passe 3 — Simplification des constantes chainees**
+**Passe 3 : Simplification des constantes chainees**
 Deux operations consecutives `+/-` avec des constantes portant sur le meme temporaire utilise une seule fois sont fusionnees en une seule. Exemple : `T = X + 3`, `R = T - 3` => `R = X`, le temporaire intermediaire disparaissant.
 
-**Passe 4a — Fusion temporaire vers destination**
+**Passe 4a : Fusion temporaire vers destination**
 Quand un temporaire est calcule puis immediatement recopie vers une destination, on ecrit directement le resultat dans la destination finale et on supprime la copie. Pattern : `T = expr`, `dst := T` => `dst = expr`, `NOP`.
 
-**Passe 4b — Propagation de copie**
+**Passe 4b : Propagation de copie**
 Quand un temporaire `T` est affecte depuis une valeur `src`, toutes ses utilisations suivantes jusqu'au prochain saut ou redefinition sont remplacees par `src`.
 
-**Passe 5 — Propagation d'expression**
+**Passe 5 : Propagation d'expression**
 Si un temporaire utilise exactement une fois peut etre substitue directement au site de consommation, la definition intermediaire est supprimee (NOP).
 
-**Passe 6 — Elimination des expressions redondantes (CSE)**
+**Passe 6 : Elimination des expressions redondantes (CSE)**
 Une table des expressions disponibles est maintenue. Si une expression `op1 operateur op2` a deja ete calculee et que ses operandes n'ont pas ete redefinies depuis, le nouveau calcul est remplace par une simple copie du temporaire precedent. La commutativite est prise en compte pour `+` et `*`.
 
-**Passe 7 — Elimination de code mort**
+**Passe 7 : Elimination de code mort**
 Les quadruplets dont le resultat n'est jamais utilise et qui n'ont pas d'effet de bord (pas de saut, pas de input, pas de out) sont marques NOP.
 
 **Compaction finale**
@@ -115,7 +115,7 @@ Les quadruplets NOP sont supprimes de la table. Les references de saut (BZ, BR) 
 
 Les passes evitent de modifier les temporaires utilises comme indices de tableau dans un champ `res` (detection par `est_utilise_comme_index`). Les barrieres de flot (BZ, BR) interrompent les propagations locales pour ne pas traverser un branchement.
 
-### 6. Generateur de code assembleur 8086 — `asm8086.c`
+### 6. Generateur de code assembleur 8086 : `asm8086.c`
 
 Le generateur parcourt la table des quadruplets apres optimisation et produit un fichier `.asm` compatible avec l'assembleur 8086.
 
@@ -178,6 +178,3 @@ ERREUR semantique: division par zero (diviseur '0' vaut 0), ligne 25, col 10
 ERREUR syntaxique: syntax error, ligne 30, col 8
 ```
 
-## Auteurs
-
-Projet realise par les etudiants du groupe Master 1 Informatique IV, USTHB, 2025/2026.
