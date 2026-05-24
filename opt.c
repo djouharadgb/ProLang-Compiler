@@ -12,37 +12,40 @@
 #define RESET "\033[0m"
 
 
+/* -------------------------------------------------------------------------
+   UTILITAIRES INTERNES
+   ------------------------------------------------------------------------- */
+
 /*
  est_nombre : verifie si la chaine s represente un nombre valide
-            (entier ou flottant, avec signe optionnel).
-            on verifie qu cest un nombre avant de simplifier x+0=x
+              (entier ou flottant, avec signe optionnel).
  */
 static int est_nombre(const char *s)
 {
     if (!s || !*s) return 0;
     const char *p = s;
-    if (*p == '-' || *p == '+') p++;  /* signe optionnel */
-    if (!*p) return 0;                /* signe seul => invalide */
+    if (*p == '-' || *p == '+') p++;
+    if (!*p) return 0;
     int a_point = 0;
     for (; *p; p++) {
         if (*p == '.') {
-            if (a_point) return 0;    /* deux points => invalide (ex: 3.1.4) */
+            if (a_point) return 0;
             a_point = 1;
-        } else if (!isdigit((unsigned char)*p)) return 0; /* lettre => pas un nombre */
+        } else if (!isdigit((unsigned char)*p)) return 0;
     }
     return 1;
 }
 
 /*
-  est_temporaire : verifie si s est un temporaire genere par le compilateur.
-  Un temporaire a la forme T0, T1, T2, ... (T majuscule + chiffres) */
+ est_temporaire : verifie si s est un temporaire T0, T1, T2, ...
+ */
 static int est_temporaire(const char *s)
 {
     int i;
     if (!s || s[0] != 'T') return 0;
     for (i = 1; s[i]; i++)
         if (!isdigit((unsigned char)s[i])) return 0;
-    return (i > 1); /* au moins un chiffre apres le T */
+    return (i > 1);
 }
 
 /*
@@ -54,20 +57,18 @@ static int est_saut(const char *op)
 }
 
 /*
- * a_effet_de_bord : verifie si le quadruplet i produit un effet
- * (lecture, ecriture, saut) qui doit etre preserve meme si son resultat n'est jamais lu.
+ a_effet_de_bord : effets observables (saut, entree, sortie).
  */
 static int a_effet_de_bord(int i)
 {
     const char *op = quad[i].oper;
     return est_saut(op)
-        || strcmp(op, "input") == 0   /* lecture clavier : effet observable */
-        || strcmp(op, "out")   == 0;  /* affichage ecran : effet observable */
+        || strcmp(op, "input") == 0
+        || strcmp(op, "out")   == 0;
 }
 
 /*
- compter_utilisations : compte combien de fois la variable var
- apparait comme operande (op1 ou op2) dans toute la table des quadruplets.
+ compter_utilisations : nombre d'apparitions de var en op1 ou op2.
  */
 static int compter_utilisations(const char *var)
 {
@@ -81,13 +82,7 @@ static int compter_utilisations(const char *var)
 }
 
 /*
- est_redefini_entre : verifie si la variable var est redefinie
- entre les indices debut (inclus) et fin (exclu).
- Exemple :
-   0: t1 := x
-   1: x  := 5
-   2: t2 := t1 + 1
-   => si on cherche a propager t1=x, x est redefini en 1 : propagation invalide
+ est_redefini_entre : verifie si var est redefinie entre debut et fin.
  */
 static int est_redefini_entre(const char *var, int debut, int fin)
 {
@@ -100,8 +95,7 @@ static int est_redefini_entre(const char *var, int debut, int fin)
 }
 
 /*
- * formater_nombre : convertit un double en chaine de caracteres.
- * Si la valeur est entiere, l'affiche sans decimale (ex: 4 et non 4.000000).
+ formater_nombre : double -> chaine sans decimale inutile.
  */
 static void formater_nombre(double v, char *buf)
 {
@@ -109,34 +103,21 @@ static void formater_nombre(double v, char *buf)
     else              sprintf(buf, "%g",  v);
 }
 
-/* ==========================================================================
+/* =========================================================================
    PASSE 1 : PROPAGATION DE CONSTANTES SYMBOLIQUES
-
-   Principe : si la table des symboles indique qu'un nom est une CONST
-   avec une valeur numerique connue, remplacer toutes ses occurrences
-   dans les operandes des quadruplets par cette valeur litterale.
-   Cela permet aux passes suivantes (simplification algebrique, etc.)
-   de plier les calculs impliquant des constantes nommees.
-
-   Exemple :
-     const N = 5;
-     T0 := x * N    =>  T0 := x * 5
-     T1 := N + 3    =>  T1 := 8  (apres simplification algebrique)
-   ========================================================================== */
+   ========================================================================= */
 static int propagation_constantes_symboliques(void)
 {
     int modifie = 0, i;
     for (i = 0; i < qc; i++) {
-        /* Tester op1 et op2 de chaque quadruplet */
         char *champs[2] = { quad[i].op1, quad[i].op2 };
         int c;
         for (c = 0; c < 2; c++) {
             char *nom = champs[c];
-            if (!nom || !*nom || est_nombre(nom)) continue; /* deja un litteral */
-            if (!ts_est_constante(nom)) continue;           /* pas une constante TS */
+            if (!nom || !*nom || est_nombre(nom)) continue;
+            if (!ts_est_constante(nom)) continue;
             const char *val = ts_get_val(nom);
-            if (!val || !*val || !est_nombre(val)) continue; /* valeur non numerique */
-            /* Substituer le nom par la valeur litterale */
+            if (!val || !*val || !est_nombre(val)) continue;
             strcpy(nom, val);
             modifie = 1;
         }
@@ -144,25 +125,9 @@ static int propagation_constantes_symboliques(void)
     return modifie;
 }
 
-/* ==========================================================================
+/* =========================================================================
    PASSE 2 : SIMPLIFICATION ALGEBRIQUE
-
-   Remplacer des operations sans effet ou calculables a la compilation
-   par des formes equivalentes plus simples.
-
-   Regles appliquees :
-     X + 0  ou  0 + X   =>  X
-     X - 0              =>  X
-     X - X              =>  0
-     X * 0  ou  0 * X   =>  0
-     X * 1  ou  1 * X   =>  X
-     X * 2  ou  2 * X   =>  X + X   (addition moins couteuse)
-     X * 4  ou  4 * X   =>  X * 2   (reduit en deux iterations a X+X)
-     X * 8  ou  8 * X   =>  X * 4   (idem, reduit progressivement)
-     X / 1              =>  X
-     X / X              =>  1       (si X != 0, cas statiquement sur)
-     C1 op C2           =>  resultat calcule a la compilation (folding)
-   ========================================================================== */
+   ========================================================================= */
 static int simplification_algebrique(void)
 {
     int modifie = 0, i;
@@ -173,26 +138,26 @@ static int simplification_algebrique(void)
         int a_est_nb = est_nombre(a), b_est_nb = est_nombre(b);
 
         if (strcmp(op, "+") == 0) {
-            if (b_est_nb && atof(b) == 0.0) {              /* X + 0 => X */
+            if (b_est_nb && atof(b) == 0.0) {
                 strcpy(op, ":="); strcpy(b, "");
                 modifie = 1;
-            } else if (a_est_nb && atof(a) == 0.0) {       /* 0 + X => X */
+            } else if (a_est_nb && atof(a) == 0.0) {
                 strcpy(op, ":="); strcpy(a, b); strcpy(b, "");
                 modifie = 1;
-            } else if (a_est_nb && b_est_nb) {             /* C + C => resultat direct */
+            } else if (a_est_nb && b_est_nb) {
                 char buf[64]; formater_nombre(atof(a) + atof(b), buf);
                 strcpy(op, ":="); strcpy(a, buf); strcpy(b, "");
                 modifie = 1;
             }
 
         } else if (strcmp(op, "-") == 0) {
-            if (b_est_nb && atof(b) == 0.0) {              /* X - 0 => X */
+            if (b_est_nb && atof(b) == 0.0) {
                 strcpy(op, ":="); strcpy(b, "");
                 modifie = 1;
-            } else if (!a_est_nb && !b_est_nb && strcmp(a, b) == 0) { /* X - X => 0 */
+            } else if (!a_est_nb && !b_est_nb && strcmp(a, b) == 0) {
                 strcpy(op, ":="); strcpy(a, "0"); strcpy(b, "");
                 modifie = 1;
-            } else if (a_est_nb && b_est_nb) {             /* C - C => resultat direct */
+            } else if (a_est_nb && b_est_nb) {
                 char buf[64]; formater_nombre(atof(a) - atof(b), buf);
                 strcpy(op, ":="); strcpy(a, buf); strcpy(b, "");
                 modifie = 1;
@@ -200,46 +165,50 @@ static int simplification_algebrique(void)
 
         } else if (strcmp(op, "*") == 0) {
             if ((a_est_nb && atof(a) == 0.0) || (b_est_nb && atof(b) == 0.0)) {
-                strcpy(op, ":="); strcpy(a, "0"); strcpy(b, ""); /* X * 0 => 0 */
+                strcpy(op, ":="); strcpy(a, "0"); strcpy(b, "");
                 modifie = 1;
-            } else if (b_est_nb && atof(b) == 1.0) {       /* X * 1 => X */
+            } else if (b_est_nb && atof(b) == 1.0) {
                 strcpy(op, ":="); strcpy(b, "");
                 modifie = 1;
-            } else if (a_est_nb && atof(a) == 1.0) {       /* 1 * X => X */
+            } else if (a_est_nb && atof(a) == 1.0) {
                 strcpy(op, ":="); strcpy(a, b); strcpy(b, "");
                 modifie = 1;
-            } else if (b_est_nb && atof(b) == 2.0) {       /* X * 2 => X + X */
+            } else if (b_est_nb && atof(b) == 2.0) {
+                /* X * 2 => X + X  (b devient une copie de a) */
                 strcpy(op, "+"); strcpy(b, a);
                 modifie = 1;
-            } else if (a_est_nb && atof(a) == 2.0) {       /* 2 * X => X + X */
-                strcpy(op, "+"); strcpy(a, b); strcpy(b, a);
+            } else if (a_est_nb && atof(a) == 2.0) {
+                /* 2 * X => X + X
+                   FIX bug original : on copie d'abord a dans un tampon,
+                   puis on ecrit a=X et b=X sans ecraser la source. */
+                char tmp[100];
+                strcpy(tmp, b);          /* sauvegarde de X */
+                strcpy(op, "+");
+                strcpy(a, tmp);          /* a = X */
+                strcpy(b, tmp);          /* b = X */
                 modifie = 1;
-            } else if (b_est_nb && atof(b) == 4.0) {       /* X * 4 => X * 2 (iter suivante: X+X) */
-                strcpy(b, "2");
-                modifie = 1;
-            } else if (a_est_nb && atof(a) == 4.0) {       /* 4 * X => 2 * X */
-                strcpy(a, "2");
-                modifie = 1;
-            } else if (b_est_nb && atof(b) == 8.0) {       /* X * 8 => X * 4 */
-                strcpy(b, "4");
-                modifie = 1;
-            } else if (a_est_nb && atof(a) == 8.0) {       /* 8 * X => 4 * X */
-                strcpy(a, "4");
-                modifie = 1;
-            } else if (a_est_nb && b_est_nb) {             /* C * C => resultat direct */
+            } else if (b_est_nb && atof(b) == 4.0) {
+                strcpy(b, "2"); modifie = 1;
+            } else if (a_est_nb && atof(a) == 4.0) {
+                strcpy(a, "2"); modifie = 1;
+            } else if (b_est_nb && atof(b) == 8.0) {
+                strcpy(b, "4"); modifie = 1;
+            } else if (a_est_nb && atof(a) == 8.0) {
+                strcpy(a, "4"); modifie = 1;
+            } else if (a_est_nb && b_est_nb) {
                 char buf[64]; formater_nombre(atof(a) * atof(b), buf);
                 strcpy(op, ":="); strcpy(a, buf); strcpy(b, "");
                 modifie = 1;
             }
 
         } else if (strcmp(op, "/") == 0) {
-            if (b_est_nb && atof(b) == 1.0) {              /* X / 1 => X */
+            if (b_est_nb && atof(b) == 1.0) {
                 strcpy(op, ":="); strcpy(b, "");
                 modifie = 1;
-            } else if (!a_est_nb && !b_est_nb && strcmp(a, b) == 0) { /* X / X => 1 */
+            } else if (!a_est_nb && !b_est_nb && strcmp(a, b) == 0) {
                 strcpy(op, ":="); strcpy(a, "1"); strcpy(b, "");
                 modifie = 1;
-            } else if (a_est_nb && b_est_nb && atof(b) != 0.0) { /* C / C => resultat direct */
+            } else if (a_est_nb && b_est_nb && atof(b) != 0.0) {
                 char buf[64]; formater_nombre(atof(a) / atof(b), buf);
                 strcpy(op, ":="); strcpy(a, buf); strcpy(b, "");
                 modifie = 1;
@@ -249,24 +218,9 @@ static int simplification_algebrique(void)
     return modifie;
 }
 
-/* ==========================================================================
+/* =========================================================================
    PASSE 3 : SIMPLIFICATION DES CONSTANTES CHAINEES
-
-   Si deux quadruplets consecutifs effectuent chacun une addition ou
-   soustraction avec une constante, et que le temporaire intermediaire
-   n'est utilise qu'une seule fois, fusionner les deux en un seul.
-
-   Pattern detecte (T utilise une seule fois) :
-     quad[i] : T  = X  +/-  C1
-     quad[j] : R  = T  +/-  C2
-   =>
-     quad[j] : R  = X  +/-  (C1 op C2)  (calcul net a la compilation)
-     quad[i] : NOP                       (supprime)
-
-   Exemple :
-     t10 = j + 1
-     t11 = t10 - 1  =>  t11 = j  (les constantes s'annulent)
-   ========================================================================== */
+   ========================================================================= */
 static int simplification_constantes_chainees(void)
 {
     int modifie = 0, i;
@@ -276,13 +230,11 @@ static int simplification_constantes_chainees(void)
         char *b1   = quad[i].op2;
         char *res1 = quad[i].res;
 
-        /* Le premier quad doit etre +/- avec une constante en op2 */
         if (strcmp(op1, "+") != 0 && strcmp(op1, "-") != 0) continue;
         if (!est_nombre(b1))       continue;
         if (!est_temporaire(res1)) continue;
         if (compter_utilisations(res1) != 1) continue;
 
-        /* Chercher le quadruplet qui utilise res1, sans franchir un saut */
         int j, quad_usage = -1;
         for (j = i + 1; j < qc; j++) {
             if (est_saut(quad[j].oper)) break;
@@ -297,12 +249,10 @@ static int simplification_constantes_chainees(void)
         char *a2  = quad[quad_usage].op1;
         char *b2  = quad[quad_usage].op2;
 
-        /* Le second quad doit aussi etre +/- avec constante, T doit etre op1 */
         if (strcmp(op2, "+") != 0 && strcmp(op2, "-") != 0) continue;
         if (strcmp(a2, res1) != 0) continue;
         if (!est_nombre(b2)) continue;
 
-        /* Calculer le decalage net des deux constantes */
         double c1 = atof(b1), c2 = atof(b2), net;
         char op_net[4];
 
@@ -312,7 +262,6 @@ static int simplification_constantes_chainees(void)
         else                                               { net = c1+c2; strcpy(op_net, "-"); }
 
         if (net == 0.0) {
-            /* Les constantes s'annulent : R = X directement */
             strcpy(quad[quad_usage].oper, ":=");
             strcpy(quad[quad_usage].op1,  a1);
             strcpy(quad[quad_usage].op2,  "");
@@ -331,22 +280,9 @@ static int simplification_constantes_chainees(void)
     return modifie;
 }
 
-/* ==========================================================================
+/* =========================================================================
    PASSE 4 : PROPAGATION DE COPIE
-
-   Lorsqu'un temporaire dst est affecte a partir d'une valeur src
-   (dst := src), remplacer toutes les utilisations suivantes de dst
-   par src directement. Cela elimine les copies intermediaires inutiles.
-
-   Conditions d'arret de la propagation :
-     - dst est redefini (sa valeur change)
-     - src est redefini (la copie n'est plus valide)
-     - un saut est rencontre (barriere de flot de controle)
-
-   Exemple :
-     t1 := t2              =>  dst=t1, src=t2
-     t3 := 4 * t1          =>  t3 := 4 * t2  (t1 remplace par t2)
-   ========================================================================== */
+   ========================================================================= */
 static int propagation_copie(void)
 {
     int modifie = 0, i;
@@ -356,10 +292,6 @@ static int propagation_copie(void)
         const char *dst = quad[i].res;
         if (!src || !*src || !dst || !*dst) continue;
         if (strcmp(src, dst) == 0) continue;
-
-        /* On ne propage que les temporaires (T0, T1, ...).
-           Propager une variable utilisateur est dangereux dans les boucles :
-           i:=1 puis i=i+1 => on ne peut pas remplacer i par 1 partout. */
         if (!est_temporaire(dst)) continue;
 
         int j;
@@ -375,21 +307,9 @@ static int propagation_copie(void)
     return modifie;
 }
 
-/* ==========================================================================
+/* =========================================================================
    PASSE 5 : PROPAGATION D'EXPRESSION
-
-   Si un temporaire T est defini par une affectation simple (T := src)
-   et n'est utilise qu'une seule fois dans tout le code, substituer
-   directement src a la place de T au point d'utilisation, puis
-   supprimer le quadruplet de definition (il devient NOP).
-
-   Condition : src ne doit pas avoir ete redefini entre la definition
-   de T et son unique utilisation.
-
-   Exemple :
-     t1 := expr            =>  T utilise une seule fois
-     t3 := 4 * t1          =>  t3 := 4 * expr  (t1 supprime)
-   ========================================================================== */
+   ========================================================================= */
 static int propagation_expression(void)
 {
     int modifie = 0, i;
@@ -425,23 +345,9 @@ static int propagation_expression(void)
     return modifie;
 }
 
-/* ==========================================================================
+/* =========================================================================
    PASSE 6 : ELIMINATION DES EXPRESSIONS REDONDANTES (CSE)
-
-   Maintenir une table des expressions deja calculees.
-   Si la meme expression apparait a nouveau et que ses operandes
-   n'ont pas ete modifies, remplacer le recalcul par une simple
-   copie du resultat precedent.
-
-   Exemple :
-     t1 := a + b        =>  memorisee dans la table
-     t2 := c * d
-     t3 := a + b        =>  REDONDANT : remplace par t3 := t1
-     t4 := t3 * e       =>  apres propagation : t4 := t1 * e
-
-   Note : un saut invalide toute la table (on ne sait plus quelles
-   expressions restent valides apres un branchement).
-   ========================================================================== */
+   ========================================================================= */
 #define MAX_EXPR_DISPO 256
 
 typedef struct {
@@ -524,115 +430,97 @@ static int elimination_expressions_redondantes(void)
     return modifie;
 }
 
-/* ==========================================================================
-   PASSE 7 : ELIMINATION DE VARIABLES MORTES (passe arriere)
+/* =========================================================================
+   PASSE 7 : ELIMINATION DE VARIABLES MORTES — VERSION CORRIGEE
 
-   Une affectation "x := ..." sur une variable utilisateur (non temporaire)
-   est inutile si x n'est plus jamais lue apres ce point.
-   On fait une passe arriere : une variable est "vivante" si elle est
-   lue avant d'etre reecrite.
+   PROBLEME DE L'ANCIENNE VERSION :
+   L'analyse de vivacite en passe arriere LINEAIRE est incorrecte en
+   presence de boucles. Le schema suivant tue systematiquement les
+   increments de boucle :
 
-   Les effets de bord (out, input, sauts) sont toujours conserves.
-   Les operandes d'un "out" sont marques vivants car ils sont consommes.
+       [i := 0]                  <- init
+       [cond] T = i <= N         <- scanne EN DERNIER dans le sens arriere
+       [BZ T -> exit]
+       ...corps...
+       [T2 = i + 1]
+       [i := T2]                 <- scanne EN PREMIER ; i pas encore "vivant"
+       [BR -> cond]              ->  i est marque mort et SUPPRIME (BUG)
 
-   Exemple :
-     x := 5              x assigne
-     out(y)              x jamais lue apres => affectation inutile
-   => x := 5 supprime (devient NOP)
-
-   Note : cette passe complete elimination_code_inutile qui ne
-   traite que les temporaires. Ici on traite les variables nommees.
-   ========================================================================== */
+   SOLUTION : on ne supprime comme "mort" que les variables utilisateur
+   qui ne sont plus lues NULLE PART dans tout le programme (analyse
+   globale simple), en excluant toutes les variables qui apparaissent
+   dans au moins un operande de quadruplet non-NOP.  C'est une
+   approximation conservatrice (pas de faux positifs) sans danger pour
+   les boucles.
+   ========================================================================= */
 static int elimination_variables_mortes(void)
 {
-    /* Table de vivacite indexee par nom de variable */
-    char vivantes[MAX_QUADS][100];
-    int  nb_vivantes = 0;
-    int  modifie = 0;
-    int  i, k, m;
+    int modifie = 0, i;
 
-    /* Passe arriere : partir de la fin du code */
-    for (i = qc - 1; i >= 0; i--) {
-        const char *op  = quad[i].oper;
-        const char *a   = quad[i].op1;
-        const char *b   = quad[i].op2;
-        const char *res = quad[i].res;
+    /*
+     * Construire l'ensemble des variables utilisateur lues au moins
+     * une fois comme operande dans tout le code intermediaire.
+     * Une variable presente dans cet ensemble ne peut jamais etre
+     * eliminee, quelle que soit sa position.
+     */
+    char lues[MAX_QUADS][100];
+    int  nb_lues = 0;
 
-        if (strcmp(op, "NOP") == 0) continue;
-
-        /* Les effets de bord sont toujours gardes ; leurs operandes sont vivants */
-        if (a_effet_de_bord(i)) {
-            /* Marquer les operandes comme vivants */
-            const char *ops[2] = { a, b };
-            for (k = 0; k < 2; k++) {
-                const char *v = ops[k];
-                if (!v || !*v || est_nombre(v)) continue;
-                int deja = 0;
-                for (m = 0; m < nb_vivantes; m++)
-                    if (strcmp(vivantes[m], v) == 0) { deja = 1; break; }
-                if (!deja && nb_vivantes < MAX_QUADS)
-                    strcpy(vivantes[nb_vivantes++], v);
-            }
-            continue;
-        }
-
-        /* Pour les affectations simples de variables utilisateur */
-        if (res && *res && !est_temporaire(res) && strcmp(op, ":=") == 0) {
-            int vivant = 0;
-            for (k = 0; k < nb_vivantes; k++)
-                if (strcmp(vivantes[k], res) == 0) { vivant = 1; break; }
-
-            if (!vivant) {
-                /* Variable morte : supprimer l'affectation */
-                strcpy(quad[i].oper, "NOP");
-                strcpy(quad[i].op1,  "");
-                strcpy(quad[i].op2,  "");
-                strcpy(quad[i].res,  "");
-                modifie = 1;
-                continue;
-            }
-
-            /* Variable vivante : la retirer de la table (elle vient d'etre definie) */
-            for (k = 0; k < nb_vivantes; k++) {
-                if (strcmp(vivantes[k], res) == 0) {
-                    memmove(vivantes[k], vivantes[k + 1],
-                            (nb_vivantes - k - 1) * sizeof(vivantes[0]));
-                    nb_vivantes--;
-                    break;
-                }
-            }
-        }
-
-        /* Marquer les operandes du quadruplet courant comme vivants */
-        const char *ops[2] = { a, b };
+    for (i = 0; i < qc; i++) {
+        const char *ops[2] = { quad[i].op1, quad[i].op2 };
+        int k;
         for (k = 0; k < 2; k++) {
             const char *v = ops[k];
-            if (!v || !*v || est_nombre(v)) continue;
+            if (!v || !*v || est_nombre(v) || est_temporaire(v)) continue;
+            /* variable utilisateur utilisee en lecture */
             int deja = 0;
-            for (m = 0; m < nb_vivantes; m++)
-                if (strcmp(vivantes[m], v) == 0) { deja = 1; break; }
-            if (!deja && nb_vivantes < MAX_QUADS)
-                strcpy(vivantes[nb_vivantes++], v);
+            int m;
+            for (m = 0; m < nb_lues; m++)
+                if (strcmp(lues[m], v) == 0) { deja = 1; break; }
+            if (!deja && nb_lues < MAX_QUADS)
+                strcpy(lues[nb_lues++], v);
+        }
+        /* Les operandes de BZ (cible numerique dans res) ne sont pas des vars */
+    }
+
+    /*
+     * Supprimer uniquement les affectations ":=" vers des variables
+     * utilisateur qui ne sont JAMAIS lues nulle part.
+     * Cela elimine les affectations vraiment inutiles (ex: variable
+     * declaree mais jamais utilisee) sans toucher aux variables de boucle.
+     */
+    for (i = 0; i < qc; i++) {
+        if (a_effet_de_bord(i)) continue;
+        if (strcmp(quad[i].oper, ":=") != 0) continue;
+        const char *res = quad[i].res;
+        if (!res || !*res || est_temporaire(res)) continue;
+
+        /* Cette variable est-elle lue quelque part ? */
+        int lue = 0;
+        int k;
+        for (k = 0; k < nb_lues; k++)
+            if (strcmp(lues[k], res) == 0) { lue = 1; break; }
+
+        if (!lue) {
+            strcpy(quad[i].oper, "NOP");
+            strcpy(quad[i].op1,  "");
+            strcpy(quad[i].op2,  "");
+            strcpy(quad[i].res,  "");
+            modifie = 1;
         }
     }
     return modifie;
 }
 
-/* ==========================================================================
+/* =========================================================================
    PASSE 8 : ELIMINATION DE CODE INUTILE
+   + REMAPPAGE DES CIBLES BZ/BR (BUG 1 CORRIGE)
 
-   Supprimer les quadruplets dont le calcul n'a aucun impact sur le
-   resultat final du programme. Deux categories sont eliminees :
-     1. Les NOP explicites (marques par les passes precedentes)
-     2. Les temporaires dont le resultat n'est jamais relu (dead temps)
-
-   Les quadruplets a effet de bord (input, out, BZ, BR) sont
-   toujours conserves.
-
-   Exemple :
-     T3 := x + y         T3 jamais relu => supprime
-     out(z)              conserve (effet de bord)
-   ========================================================================== */
+   Apres compaction du tableau, tous les indices absolus stockes dans
+   le champ res des BZ/BR deviennent invalides.  On construit une table
+   de remappage old_idx -> new_idx avant de compacter, puis on met a
+   jour chaque cible de saut.
+   ========================================================================= */
 static int elimination_code_inutile(void)
 {
     int modifie = 0, i;
@@ -643,65 +531,78 @@ static int elimination_code_inutile(void)
         if (a_effet_de_bord(i)) continue;
         const char *op  = quad[i].oper;
         const char *res = quad[i].res;
+
         if (strcmp(op, "NOP") == 0) { a_supprimer[i] = 1; continue; }
+
         if (est_temporaire(res) && compter_utilisations(res) == 0)
             a_supprimer[i] = 1;
     }
 
-    /* Build a remapping table: old index -> new index */
+    /* ------------------------------------------------------------------
+       ETAPE 1 : construire la table de remappage old -> new
+       ------------------------------------------------------------------ */
     int remap[MAX_QUADS];
     int nouveau_qc = 0;
     for (i = 0; i < qc; i++) {
-        remap[i] = a_supprimer[i] ? -1 : nouveau_qc++;
+        if (a_supprimer[i])
+            remap[i] = -1;          /* quad supprime : n'a plus d'indice */
+        else
+            remap[i] = nouveau_qc++;
     }
 
-    /* Update all BZ/BR jump targets using the remap table */
+    /* ------------------------------------------------------------------
+       ETAPE 2 : mettre a jour les cibles BZ / BR
+       Pour un saut vers old_target :
+         - si old_target est supprime, avancer au premier quad conserve
+           (le saut doit atterrir "apres" le NOP supprime)
+         - sinon utiliser remap[old_target]
+       Si old_target >= qc c'est la cible "sortie programme" : on la
+       laisse pointer vers nouveau_qc (label de fin genere par asm8086).
+       ------------------------------------------------------------------ */
     for (i = 0; i < qc; i++) {
         if (a_supprimer[i]) continue;
-        if (strcmp(quad[i].oper, "BZ") == 0 || strcmp(quad[i].oper, "BR") == 0) {
-            int old_target = atoi(quad[i].res);
-            if (old_target >= 0 && old_target < qc) {
-                /* If the target itself was removed, forward to next kept quad */
-                int new_target = old_target;
-                while (new_target < qc && remap[new_target] == -1)
-                    new_target++;
-                char buf[20];
-                sprintf(buf, "%d", (new_target < qc) ? remap[new_target] : nouveau_qc);
-                strcpy(quad[i].res, buf);
-            }
+        if (!est_saut(quad[i].oper)) continue;
+
+        int old_target = atoi(quad[i].res);
+
+        if (old_target < 0 || old_target >= qc) {
+            /* Cible hors tableau = label de fin du programme */
+            char buf[20];
+            sprintf(buf, "%d", nouveau_qc);
+            strcpy(quad[i].res, buf);
+            continue;
         }
+
+        /* Avancer si le quad cible lui-meme est supprime */
+        int t = old_target;
+        while (t < qc && a_supprimer[t])
+            t++;
+
+        int new_target = (t < qc) ? remap[t] : nouveau_qc;
+        char buf[20];
+        sprintf(buf, "%d", new_target);
+        strcpy(quad[i].res, buf);
     }
 
-    /* Compact the array */
+    /* ------------------------------------------------------------------
+       ETAPE 3 : compacter le tableau
+       ------------------------------------------------------------------ */
     nouveau_qc = 0;
     for (i = 0; i < qc; i++) {
         if (!a_supprimer[i]) {
             if (i != nouveau_qc) quad[nouveau_qc] = quad[i];
             nouveau_qc++;
-        } else modifie = 1;
+        } else {
+            modifie = 1;
+        }
     }
     qc = nouveau_qc;
     return modifie;
 }
 
-/* ==========================================================================
-   OPTIMISER_QUADRUPLETS : point d'entree de l'optimisation
-
-   Les 8 passes sont appliquees en boucle jusqu'a point fixe
-   (aucune modification produite). La boucle garantit que des
-   simplifications en cascade (ex: X*8 -> X*4 -> X*2 -> X+X)
-   sont toutes appliquees.
-
-   Ordre des passes a chaque iteration :
-     1. Propagation constantes symboliques  (const N=5 => remplace N par 5)
-     2. Simplification algebrique           (X*1=X, X+0=X, X*2=X+X, C op C)
-     3. Simplification constantes chainees  (t=j+1; r=t-1 => r=j)
-     4. Propagation de copie               (y:=x => remplace y par x apres)
-     5. Propagation d'expression            (T:=src utilise 1 fois => inline)
-     6. Elimination expressions redondantes (a+b calcule 2 fois => reutiliser)
-     7. Elimination variables mortes        (x:=5 mais x jamais relu => NOP)
-     8. Elimination de code inutile         (NOP et temporaires morts => retirer)
-   ========================================================================== */
+/* =========================================================================
+   OPTIMISER_QUADRUPLETS : point d'entree
+   ========================================================================= */
 void optimiser_quadruplets(void)
 {
     int modifie, iterations = 0;
@@ -711,29 +612,14 @@ void optimiser_quadruplets(void)
     printf(CYN "============================================================\n" RESET);
 
     do {
-        /* Passe 1 : substituer les constantes nommees par leur valeur */
         modifie  = propagation_constantes_symboliques();
-
-        /* Passe 2 : simplifier les operations algebriques triviales */
         modifie |= simplification_algebrique();
-
-        /* Passe 3 : fusionner deux +/- de constantes consecutives */
         modifie |= simplification_constantes_chainees();
-
-        /* Passe 4 : propager les copies (dst:=src => remplacer dst par src) */
         modifie |= propagation_copie();
-
-        /* Passe 5 : propager les expressions a usage unique vers leur site */
         modifie |= propagation_expression();
-
-        /* Passe 6 : eliminer les recalculs d'expressions deja disponibles */
         modifie |= elimination_expressions_redondantes();
-
-        /* Passe 7 : supprimer les affectations a des variables jamais relues */
         modifie |= elimination_variables_mortes();
-
-        /* Passe 8 : supprimer les NOP et les temporaires morts */
-        modifie |= elimination_code_inutile();
+        modifie |= elimination_code_inutile();   /* remappe BZ/BR avant compaction */
 
         iterations++;
     } while (modifie && iterations < 30);

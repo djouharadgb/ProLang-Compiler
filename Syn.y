@@ -14,27 +14,46 @@ int  yyerror(char *msg);
 
 extern int nb_ligne;
 extern int nb_col;
-extern int semantic_errors;  /* defini dans ts.c */
-TypeVar type_courant; /* Type courant des variables when we have multiple declarations   */
+extern int semantic_errors;
+TypeVar type_courant;
 
-/* Pending IDF list — collecte les noms avant que le type soit connu */
+/* Pending IDF list */
 #define MAX_PENDING_IDF 100
-static char *pending_idfs[MAX_PENDING_IDF]; /*cas de plusierus declaration, bison ne connait pas le type encore*/
+static char *pending_idfs[MAX_PENDING_IDF];
 static int pending_count = 0;
 
-/* Contexte des boucles while imbriquees (debut condition + index BZ a patcher) */
+/* Contexte des boucles while imbriquees */
 #define MAX_WHILE_NEST 100
-static int while_start_stack[MAX_WHILE_NEST]; /*index deb while*/
-static int while_bz_stack[MAX_WHILE_NEST]; /*index BZ a patcher: fin while*/
+static int while_start_stack[MAX_WHILE_NEST];
+static int while_bz_stack[MAX_WHILE_NEST];
 static int while_top = -1;
+
+/*
+ * Contexte des boucles for imbriquees.
+ *
+ * BUG 3 CORRIGE : l'ancienne implementation cherchait le BZ non patche
+ * en remontant le tableau a reculons, ce qui est fragile (un BZ non
+ * patche issu d'un if imbrique pouvait etre intercepte).  On utilise
+ * maintenant un vrai empilement comme pour while, avec deux informations
+ * par niveau :
+ *   for_cond_stack[top] = indice du quad DEBUT DE CONDITION (quad <=)
+ *                         -> cible du BR de rebouclage
+ *   for_bz_stack[top]   = indice du quad BZ (a patcher a la fin)
+ *
+ * Cela garantit que chaque endfor patche exactement son propre BZ,
+ * independamment des structures de controle imbriquees.
+ */
+#define MAX_FOR_NEST 100
+static int for_cond_stack[MAX_FOR_NEST]; /* indice du quad condition */
+static int for_bz_stack[MAX_FOR_NEST];   /* indice du quad BZ        */
+static int for_top = -1;
 %}
 
 %union {
     int    ival;
-    float  fval; /*flex stocke la val dans yylval et bison la recupere de $*/
+    float  fval;
     char*  sval;
 }
-/*en vrai les $ on accede a yylval */
 
 %token <sval> IDF
 %token <sval> STRING
@@ -81,10 +100,9 @@ static int while_top = -1;
 %left OP_ADD OP_SUB
 %left OP_MUL OP_DIV
 
-%type <sval> expression condition /*type des non-terminals , cela retourne char : nom temp T1...*/
+%type <sval> expression condition
 %type <sval> valeur
 %type <ival> sem_checkpoint
-
 
 %start programme
 
@@ -121,7 +139,7 @@ programme
 
 partie_declaration
     : liste_declarations
-    |  
+    |
     ;
 
 liste_declarations
@@ -132,8 +150,16 @@ liste_declarations
 declaration
     : decl_variable
     | decl_constante
-    | error SEP_SEMICOLON    /* récupération dans les déclarations */
-        { yyerrok; }
+    | error SEP_SEMICOLON
+        {
+            /* BUG 6 CORRIGE : liberer et reinitialiser la liste pending
+               pour eviter que des noms fantomes contaminent la prochaine
+               declaration valide. */
+            int _i;
+            for (_i = 0; _i < pending_count; _i++) free(pending_idfs[_i]);
+            pending_count = 0;
+            yyerrok;
+        }
     ;
 
 decl_variable
@@ -144,30 +170,30 @@ suite_definition
     : type SEP_SEMICOLON
         {
             int ok = 1;
-            for (int i = 0; i < pending_count; i++) {
-                if (!ts_inserer_variable(pending_idfs[i], type_courant)) ok = 0; /*ok, si il ya erreur =0*/
-                free(pending_idfs[i]);
+            int _i;
+            for (_i = 0; _i < pending_count; _i++) {
+                if (!ts_inserer_variable(pending_idfs[_i], type_courant)) ok = 0;
+                free(pending_idfs[_i]);
             }
             pending_count = 0;
             if (ok) printf("Declaration de variable(s) correcte.\n");
         }
     | type OP_INIT valeur SEP_SEMICOLON
         {
-            /* $3 = valeur string */
             int ok = 1;
-            for (int i = 0; i < pending_count; i++) {
-                if (!ts_inserer_variable(pending_idfs[i], type_courant)) { ok = 0; free(pending_idfs[i]); continue; }
-                ts_marquer_init(pending_idfs[i]);
-                quadr(":=", $3, "", pending_idfs[i]);
-                ts_set_val(pending_idfs[i], $3);
-                free(pending_idfs[i]);
+            int _i;
+            for (_i = 0; _i < pending_count; _i++) {
+                if (!ts_inserer_variable(pending_idfs[_i], type_courant)) { ok = 0; free(pending_idfs[_i]); continue; }
+                ts_marquer_init(pending_idfs[_i]);
+                quadr(":=", $3, "", pending_idfs[_i]);
+                ts_set_val(pending_idfs[_i], $3);
+                free(pending_idfs[_i]);
             }
             pending_count = 0;
             if (ok) printf("Declaration de variable(s) avec initialisation correcte.\n");
         }
     | SEP_LBRACKET type SEP_SEMICOLON NUM_INT SEP_RBRACKET SEP_SEMICOLON
         {
-            /* $4 = taille (NUM_INT) */
             if (pending_count != 1) {
                 printf(RED "ERREUR semantique: un tableau ne peut avoir qu'un seul nom, ligne %d, col %d" RESET "\n",
                        nb_ligne, nb_col);
@@ -179,7 +205,8 @@ suite_definition
                 ts_inserer_tableau(pending_idfs[0], type_courant, $4);
                 printf("Declaration de tableau correcte.\n");
             }
-            for (int i = 0; i < pending_count; i++) free(pending_idfs[i]);
+            int _i;
+            for (_i = 0; _i < pending_count; _i++) free(pending_idfs[_i]);
             pending_count = 0;
         }
     ;
@@ -210,12 +237,12 @@ liste_idf
     ;
 
 type
-    : INTEGER_MC   { type_courant = TYPE_INTEGER; } /*we affect to use it later in cases ike int z|b|c; same type*/
+    : INTEGER_MC   { type_courant = TYPE_INTEGER; }
     | FLOAT_MC     { type_courant = TYPE_FLOAT;   }
     ;
 
 valeur
-    : NUM_INT /*$$ resultat finale retournee par la regle*/
+    : NUM_INT
         { $$ = (char*)malloc(20); sprintf($$, "%d", $1); }
     | NUM_FLOAT
         { $$ = (char*)malloc(20); sprintf($$, "%f", $1); }
@@ -231,7 +258,7 @@ valeur
 
 liste_instructions
     : instruction liste_instructions
-    |  
+    |
     ;
 
 instruction
@@ -241,96 +268,86 @@ instruction
     | instruction_for
     | instruction_input
     | instruction_output
-    | error SEP_SEMICOLON  // ← récupération : sauter jusqu'au ";"
-        { yyerrok; } 
+    | error SEP_SEMICOLON
+        { yyerrok; }
     ;
 
 sem_checkpoint
     : /* vide */
-        {
-            $$ = semantic_errors;
-        }
+        { $$ = semantic_errors; }
     ;
 
 instruction_affectation
-: IDF OP_ASSIGN sem_checkpoint expression SEP_SEMICOLON
-    {
-        int expr_has_error = (semantic_errors > $3);
+    : IDF OP_ASSIGN sem_checkpoint expression SEP_SEMICOLON
+        {
+            int expr_has_error = (semantic_errors > $3);
 
-        if (!ts_est_declare($1)) {
-            printf(RED "ERREUR semantique: variable '%s' non declaree, "
-                   "ligne %d, col %d" RESET "\n", $1, nb_ligne, nb_col);
-            semantic_errors++;
-        } else if (ts_est_constante($1)) {
-            printf(RED "ERREUR semantique: modification de la constante '%s', "
-                   "ligne %d, col %d" RESET "\n", $1, nb_ligne, nb_col);
-            semantic_errors++;
-        } else if (expr_has_error) {
-            /* L'expression a deja leve une erreur semantique : ne pas valider l'affectation. */
-        } else {
-            /* Vérification compatibilité de types */
-            const char *type_dest = ts_get_type($1);  /* type de la variable */
-            const char *type_src  = ts_get_type($4);  /* type de l'expression */
-
-            /* Les deux sont connus ET différents → erreur */
-            if (type_dest != NULL && type_src != NULL
-                && strcmp(type_dest, type_src) != 0) {
-                printf(RED "ERREUR semantique: incompatibilite de types pour "
-                       "'%s' (%s) <-- expression (%s), ligne %d, col %d"
-                       RESET "\n",
-                       $1, type_dest, type_src, nb_ligne, nb_col);
+            if (!ts_est_declare($1)) {
+                printf(RED "ERREUR semantique: variable '%s' non declaree, "
+                       "ligne %d, col %d" RESET "\n", $1, nb_ligne, nb_col);
                 semantic_errors++;
+            } else if (ts_est_constante($1)) {
+                printf(RED "ERREUR semantique: modification de la constante '%s', "
+                       "ligne %d, col %d" RESET "\n", $1, nb_ligne, nb_col);
+                semantic_errors++;
+            } else if (expr_has_error) {
+                /* expression invalide : pas d'affectation */
             } else {
-                quadr(":=", $4, "", $1);
-                ts_marquer_init($1);
-                printf("Affectation correcte.\n");
+                const char *type_dest = ts_get_type($1);
+                const char *type_src  = ts_get_type($4);
+                if (type_dest != NULL && type_src != NULL
+                    && strcmp(type_dest, type_src) != 0) {
+                    printf(RED "ERREUR semantique: incompatibilite de types pour "
+                           "'%s' (%s) <-- expression (%s), ligne %d, col %d"
+                           RESET "\n",
+                           $1, type_dest, type_src, nb_ligne, nb_col);
+                    semantic_errors++;
+                } else {
+                    quadr(":=", $4, "", $1);
+                    ts_marquer_init($1);
+                    printf("Affectation correcte.\n");
+                }
             }
         }
-    }
     | IDF SEP_LBRACKET sem_checkpoint expression SEP_RBRACKET OP_ASSIGN expression SEP_SEMICOLON
-    {
-        int expr_has_error = (semantic_errors > $3);
+        {
+            int expr_has_error = (semantic_errors > $3);
 
-        if (!ts_est_declare($1)) {
-            printf(RED "ERREUR semantique: tableau '%s' non declare, "
-                   "ligne %d, col %d" RESET "\n", $1, nb_ligne, nb_col);
-            semantic_errors++;
-        } else if (expr_has_error) {
-            /* Index ou valeur d'affectation invalide(s) : ne pas confirmer l'affectation. */
-        } else {
-            int idx_val = atoi($4);          /* valeur de l'index si littéral */
-            int taille  = ts_get_taille($1); /* taille du tableau depuis la TS */
-
-            /* Index négatif détectable statiquement */
-            if (idx_val < 0) {
-                printf(RED "ERREUR semantique: index negatif (%d) pour le "
-                       "tableau '%s', ligne %d, col %d" RESET "\n",
-                       idx_val, $1, nb_ligne, nb_col);
+            if (!ts_est_declare($1)) {
+                printf(RED "ERREUR semantique: tableau '%s' non declare, "
+                       "ligne %d, col %d" RESET "\n", $1, nb_ligne, nb_col);
                 semantic_errors++;
-
-            /* Index hors limites détectable statiquement */
-            } else if (taille > 0 && idx_val >= taille) {
-                printf(RED "ERREUR semantique: index (%d) hors limites pour "
-                       "le tableau '%s' (taille %d), ligne %d, col %d"
-                       RESET "\n",
-                       idx_val, $1, taille, nb_ligne, nb_col);
-                semantic_errors++;
-
+            } else if (expr_has_error) {
+                /* index ou valeur invalide */
             } else {
-                char dest[100];
-                sprintf(dest, "%s[%s]", $1, $4);
-                quadr(":=", $7, "", dest);
-                printf("Affectation tableau correcte.\n");
+                int idx_val = atoi($4);
+                int taille  = ts_get_taille($1);
+
+                if (idx_val < 0) {
+                    printf(RED "ERREUR semantique: index negatif (%d) pour le "
+                           "tableau '%s', ligne %d, col %d" RESET "\n",
+                           idx_val, $1, nb_ligne, nb_col);
+                    semantic_errors++;
+                } else if (taille > 0 && idx_val >= taille) {
+                    printf(RED "ERREUR semantique: index (%d) hors limites pour "
+                           "le tableau '%s' (taille %d), ligne %d, col %d"
+                           RESET "\n",
+                           idx_val, $1, taille, nb_ligne, nb_col);
+                    semantic_errors++;
+                } else {
+                    char dest[100];
+                    sprintf(dest, "%s[%s]", $1, $4);
+                    quadr(":=", $7, "", dest);
+                    printf("Affectation tableau correcte.\n");
+                }
             }
         }
-    }
     ;
 
 instruction_condition
     : IF_MC SEP_LPAREN condition SEP_RPAREN THEN_MC SEP_COLON
       SEP_LBRACE
         {
-            /* BZ: si condition fausse, sauter */
             quadr("BZ", $3, "", "");
         }
       liste_instructions SEP_RBRACE
@@ -340,14 +357,14 @@ instruction_condition
 suite_if
     : ELSE_MC
         {
-            /* BR: sauter le bloc else */
             quadr("BR", "", "", "");
-            /* Patcher le BZ vers le debut du else */
+            /* patcher le BZ vers le debut du else */
             char idx_str[20];
             sprintf(idx_str, "%d", qc);
-            for (int i = qc - 2; i >= 0; i--) { /*br -1, else -2*/
-                if (strcmp(quad[i].oper, "BZ") == 0 && strlen(quad[i].res) == 0) {
-                    updateQuad(i, 3, idx_str);
+            int _i;
+            for (_i = qc - 2; _i >= 0; _i--) {
+                if (strcmp(quad[_i].oper, "BZ") == 0 && strlen(quad[_i].res) == 0) {
+                    updateQuad(_i, 3, idx_str);
                     break;
                 }
             }
@@ -355,12 +372,13 @@ suite_if
       SEP_LBRACE liste_instructions SEP_RBRACE
       ENDIF_MC SEP_SEMICOLON
         {
-            /* Patcher le BR vers apres le else */
+            /* patcher le BR vers apres le else */
             char idx_str[20];
             sprintf(idx_str, "%d", qc);
-            for (int i = qc - 1; i >= 0; i--) {
-                if (strcmp(quad[i].oper, "BR") == 0 && strlen(quad[i].res) == 0) {
-                    updateQuad(i, 3, idx_str);
+            int _i;
+            for (_i = qc - 1; _i >= 0; _i--) {
+                if (strcmp(quad[_i].oper, "BR") == 0 && strlen(quad[_i].res) == 0) {
+                    updateQuad(_i, 3, idx_str);
                     break;
                 }
             }
@@ -368,12 +386,12 @@ suite_if
         }
     | ENDIF_MC SEP_SEMICOLON
         {
-            /* Patcher le BZ vers apres le then cas if sans lese */
             char idx_str[20];
             sprintf(idx_str, "%d", qc);
-            for (int i = qc - 1; i >= 0; i--) {
-                if (strcmp(quad[i].oper, "BZ") == 0 && strlen(quad[i].res) == 0) {
-                    updateQuad(i, 3, idx_str);
+            int _i;
+            for (_i = qc - 1; _i >= 0; _i--) {
+                if (strcmp(quad[_i].oper, "BZ") == 0 && strlen(quad[_i].res) == 0) {
+                    updateQuad(_i, 3, idx_str);
                     break;
                 }
             }
@@ -392,36 +410,44 @@ instruction_loop_while
       }
       condition SEP_RPAREN
         {
-            /* si condition fausse, sauter hors de la boucle */
             quadr("BZ", $5, "", "");
-
-            if (while_top >= 0) {
+            if (while_top >= 0)
                 while_bz_stack[while_top] = qc - 1;
-            }
         }
       SEP_LBRACE liste_instructions SEP_RBRACE
       ENDLOOP_MC SEP_SEMICOLON
         {
             if (while_top >= 0) {
-                /* BR vers le debut de condition de CE while (meme en imbrication) */
                 char debut_str[20];
                 sprintf(debut_str, "%d", while_start_stack[while_top]);
                 quadr("BR", "", "", debut_str);
 
-                /* Patcher le BZ de CE while vers l'instruction suivant endloop */
                 char fin_str[20];
                 sprintf(fin_str, "%d", qc);
-                if (while_bz_stack[while_top] >= 0) {
+                if (while_bz_stack[while_top] >= 0)
                     updateQuad(while_bz_stack[while_top], 3, fin_str);
-                }
 
                 while_top--;
             }
-
             printf("Boucle while correcte.\n");
         }
     ;
 
+/*
+ * BUG 3 CORRIGE : generation de code pour la boucle for.
+ *
+ * Ancienne approche : recherche arriere de "le premier BZ non patche"
+ *   -> fragile si un if non ferme existe dans le corps.
+ *   -> BR de rebouclage pointe vers bz_idx-1, faux si la condition a
+ *      genere plusieurs quadruplets (expression complexe).
+ *
+ * Nouvelle approche :
+ *   1. On enregistre for_cond_stack[top] = qc juste AVANT d'emettre
+ *      les quads de la condition (debut reel de la condition).
+ *   2. On enregistre for_bz_stack[top] = indice du BZ emis apres.
+ *   3. A endfor : BR pointe vers for_cond_stack[top] (debut condition).
+ *      BZ est patche vers qc (apres le BR = sortie de boucle).
+ */
 instruction_for
     : FOR_MC IDF IN_MC expression TO_MC expression
         {
@@ -430,37 +456,48 @@ instruction_for
                        $2, nb_ligne, nb_col);
                 semantic_errors++;
             }
-            /* Initialiser i <- debut */
+
+            /* Initialiser : var <- debut */
             quadr(":=", $4, "", $2);
             ts_marquer_init($2);
-            /* Condition: i <= fin */
+
+            /* Empiler le contexte for AVANT d'emettre la condition */
+            if (for_top < MAX_FOR_NEST - 1) {
+                for_top++;
+                for_cond_stack[for_top] = qc;   /* indice du prochain quad = debut condition */
+                for_bz_stack[for_top]   = -1;
+            }
+
+            /* Condition : var <= fin */
             char *tmp = strdup(nouveau_temp());
             quadr("<=", $2, $6, tmp);
+
+            /* BZ de sortie (non patche pour l'instant) */
             quadr("BZ", tmp, "", "");
+            if (for_top >= 0)
+                for_bz_stack[for_top] = qc - 1;  /* indice du BZ qu'on vient d'emettre */
         }
       SEP_LBRACE liste_instructions SEP_RBRACE
       ENDFOR_MC SEP_SEMICOLON
         {
-            /* Incrementer i <- i + 1 */
-            char *tmp = strdup(nouveau_temp());
-            quadr("+", $2, "1", tmp); /*incrementer avec 1*/
-            quadr(":=", tmp, "", $2);/*affecter a IDF*/
-            /* BR vers la condition */
-            /* Trouver le BZ non patche */
-            int bz_idx = -1;
-            for (int i = qc - 1; i >= 0; i--) {
-                if (strcmp(quad[i].oper, "BZ") == 0 && strlen(quad[i].res) == 0) {
-                    bz_idx = i;
-                    break;
-                }
-            }
-            if (bz_idx >= 0) {
+            if (for_top >= 0) {
+                /* Incrementer : var <- var + 1 */
+                char *tmp = strdup(nouveau_temp());
+                quadr("+", $2, "1", tmp);
+                quadr(":=", tmp, "", $2);
+
+                /* BR vers le debut REEL de la condition (enregistre sur la pile) */
                 char cond_str[20];
-                sprintf(cond_str, "%d", bz_idx - 1);
+                sprintf(cond_str, "%d", for_cond_stack[for_top]);
                 quadr("BR", "", "", cond_str);
+
+                /* Patcher le BZ de CE for vers apres le BR (sortie boucle) */
                 char fin_str[20];
                 sprintf(fin_str, "%d", qc);
-                updateQuad(bz_idx, 3, fin_str);
+                if (for_bz_stack[for_top] >= 0)
+                    updateQuad(for_bz_stack[for_top], 3, fin_str);
+
+                for_top--;
             }
             printf("Boucle for correcte.\n");
         }
@@ -493,34 +530,36 @@ liste_out
 
 element_out
     : STRING     { quadr("out", $1, "", ""); }
-    | IDF {
-    if (!ts_est_declare($1)) {
-        printf(RED "ERREUR semantique: variable '%s' non declaree, "
-               "ligne %d, col %d" RESET "\n", $1, nb_ligne, nb_col);
-        semantic_errors++;
-    } else if (!ts_est_initialise($1)) {
-        printf(RED "ERREUR semantique: variable '%s' utilisee sans "
-               "initialisation, ligne %d, col %d" RESET "\n",
-               $1, nb_ligne, nb_col);
-        semantic_errors++;
-    } else {
-        quadr("out", $1, "", "");  /* ← quad seulement si tout est ok */
-    }
-}
-    | NUM_INT    {
-                    char s[20]; sprintf(s, "%d", $1);
-                    quadr("out", s, "", "");
-                 }
-    | NUM_FLOAT  {
-                    char s[20]; sprintf(s, "%f", $1);
-                    quadr("out", s, "", "");
-                 }
+    | IDF
+        {
+            if (!ts_est_declare($1)) {
+                printf(RED "ERREUR semantique: variable '%s' non declaree, "
+                       "ligne %d, col %d" RESET "\n", $1, nb_ligne, nb_col);
+                semantic_errors++;
+            } else if (!ts_est_initialise($1)) {
+                printf(RED "ERREUR semantique: variable '%s' utilisee sans "
+                       "initialisation, ligne %d, col %d" RESET "\n",
+                       $1, nb_ligne, nb_col);
+                semantic_errors++;
+            } else {
+                quadr("out", $1, "", "");
+            }
+        }
+    | NUM_INT
+        {
+            char s[20]; sprintf(s, "%d", $1);
+            quadr("out", s, "", "");
+        }
+    | NUM_FLOAT
+        {
+            char s[20]; sprintf(s, "%f", $1);
+            quadr("out", s, "", "");
+        }
     ;
-
 
 condition
     : expression OP_EQ expression
-        { $$ = strdup(nouveau_temp()); quadr("==", $1, $3, $$); } /*we need to ;ut result in temp, $$ cant just affect to it like that*/
+        { $$ = strdup(nouveau_temp()); quadr("==", $1, $3, $$); }
     | expression OP_NE expression
         { $$ = strdup(nouveau_temp()); quadr("!=", $1, $3, $$); }
     | expression OP_LT expression
@@ -541,7 +580,6 @@ condition
         { $$ = $2; }
     ;
 
-
 expression
     : expression OP_ADD expression
         { $$ = strdup(nouveau_temp()); quadr("+", $1, $3, $$); }
@@ -551,7 +589,6 @@ expression
         { $$ = strdup(nouveau_temp()); quadr("*", $1, $3, $$); }
     | expression OP_DIV expression
         {
-            /* Verification division par zero: litteral ou constante de valeur 0 */
             int div_zero = (strcmp($3, "0") == 0 || strcmp($3, "0.0") == 0);
             if (!div_zero) {
                 const char *v = ts_get_val($3);
@@ -575,6 +612,12 @@ expression
         {
             if (!ts_est_declare($1)) {
                 printf(RED "ERREUR semantique: variable '%s' non declaree, ligne %d, col %d" RESET "\n",
+                       $1, nb_ligne, nb_col);
+                semantic_errors++;
+            } else if (!ts_est_initialise($1)) {
+                /* BUG 5 CORRIGE : verifier l'initialisation aussi dans les expressions
+                   arithmetiques, pas uniquement dans out(). */
+                printf(RED "ERREUR semantique: variable '%s' utilisee sans initialisation, ligne %d, col %d" RESET "\n",
                        $1, nb_ligne, nb_col);
                 semantic_errors++;
             }

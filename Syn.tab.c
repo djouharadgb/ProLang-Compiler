@@ -84,21 +84,41 @@ int  yyerror(char *msg);
 
 extern int nb_ligne;
 extern int nb_col;
-extern int semantic_errors;  /* defini dans ts.c */
-TypeVar type_courant; /* Type courant des variables when we have multiple declarations   */
+extern int semantic_errors;
+TypeVar type_courant;
 
-/* Pending IDF list — collecte les noms avant que le type soit connu */
+/* Pending IDF list */
 #define MAX_PENDING_IDF 100
-static char *pending_idfs[MAX_PENDING_IDF]; /*cas de plusierus declaration, bison ne connait pas le type encore*/
+static char *pending_idfs[MAX_PENDING_IDF];
 static int pending_count = 0;
 
-/* Contexte des boucles while imbriquees (debut condition + index BZ a patcher) */
+/* Contexte des boucles while imbriquees */
 #define MAX_WHILE_NEST 100
-static int while_start_stack[MAX_WHILE_NEST]; /*index deb while*/
-static int while_bz_stack[MAX_WHILE_NEST]; /*index BZ a patcher: fin while*/
+static int while_start_stack[MAX_WHILE_NEST];
+static int while_bz_stack[MAX_WHILE_NEST];
 static int while_top = -1;
 
-#line 102 "Syn.tab.c"
+/*
+ * Contexte des boucles for imbriquees.
+ *
+ * BUG 3 CORRIGE : l'ancienne implementation cherchait le BZ non patche
+ * en remontant le tableau a reculons, ce qui est fragile (un BZ non
+ * patche issu d'un if imbrique pouvait etre intercepte).  On utilise
+ * maintenant un vrai empilement comme pour while, avec deux informations
+ * par niveau :
+ *   for_cond_stack[top] = indice du quad DEBUT DE CONDITION (quad <=)
+ *                         -> cible du BR de rebouclage
+ *   for_bz_stack[top]   = indice du quad BZ (a patcher a la fin)
+ *
+ * Cela garantit que chaque endfor patche exactement son propre BZ,
+ * independamment des structures de controle imbriquees.
+ */
+#define MAX_FOR_NEST 100
+static int for_cond_stack[MAX_FOR_NEST]; /* indice du quad condition */
+static int for_bz_stack[MAX_FOR_NEST];   /* indice du quad BZ        */
+static int for_top = -1;
+
+#line 122 "Syn.tab.c"
 
 # ifndef YY_CAST
 #  ifdef __cplusplus
@@ -599,14 +619,14 @@ static const yytype_int8 yytranslate[] =
 /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_int16 yyrline[] =
 {
-       0,    94,    94,   123,   124,   128,   129,   133,   134,   135,
-     140,   144,   154,   168,   188,   200,   205,   213,   214,   218,
-     220,   222,   224,   226,   228,   233,   234,   238,   239,   240,
-     241,   242,   243,   244,   250,   256,   290,   332,   330,   342,
-     341,   369,   386,   394,   385,   427,   426,   470,   485,   490,
-     491,   495,   496,   510,   514,   522,   524,   526,   528,   530,
-     532,   534,   536,   538,   540,   546,   548,   550,   552,   568,
-     570,   572,   574,   583,   593,   598
+       0,   112,   112,   141,   142,   146,   147,   151,   152,   153,
+     166,   170,   181,   195,   215,   227,   232,   240,   241,   245,
+     247,   249,   251,   253,   255,   260,   261,   265,   266,   267,
+     268,   269,   270,   271,   277,   281,   312,   350,   348,   359,
+     358,   387,   404,   412,   403,   453,   452,   507,   522,   527,
+     528,   532,   533,   548,   553,   561,   563,   565,   567,   569,
+     571,   573,   575,   577,   579,   584,   586,   588,   590,   605,
+     607,   609,   611,   626,   636,   641
 };
 #endif
 
@@ -1300,7 +1320,7 @@ yyreduce:
   switch (yyn)
     {
   case 2: /* programme: BeginProject IDF SEP_SEMICOLON Setup SEP_COLON partie_declaration Run SEP_COLON SEP_LBRACE liste_instructions SEP_RBRACE EndProject SEP_SEMICOLON  */
-#line 100 "Syn.y"
+#line 118 "Syn.y"
         {
             if (semantic_errors == 0)
                 printf("\nAnalyse syntaxique et semantique correcte.\n");
@@ -1321,51 +1341,59 @@ yyreduce:
 
             YYACCEPT;
         }
-#line 1325 "Syn.tab.c"
+#line 1345 "Syn.tab.c"
     break;
 
   case 9: /* declaration: error SEP_SEMICOLON  */
-#line 136 "Syn.y"
-        { yyerrok; }
-#line 1331 "Syn.tab.c"
+#line 154 "Syn.y"
+        {
+            /* BUG 6 CORRIGE : liberer et reinitialiser la liste pending
+               pour eviter que des noms fantomes contaminent la prochaine
+               declaration valide. */
+            int _i;
+            for (_i = 0; _i < pending_count; _i++) free(pending_idfs[_i]);
+            pending_count = 0;
+            yyerrok;
+        }
+#line 1359 "Syn.tab.c"
     break;
 
   case 11: /* suite_definition: type SEP_SEMICOLON  */
-#line 145 "Syn.y"
+#line 171 "Syn.y"
         {
             int ok = 1;
-            for (int i = 0; i < pending_count; i++) {
-                if (!ts_inserer_variable(pending_idfs[i], type_courant)) ok = 0; /*ok, si il ya erreur =0*/
-                free(pending_idfs[i]);
+            int _i;
+            for (_i = 0; _i < pending_count; _i++) {
+                if (!ts_inserer_variable(pending_idfs[_i], type_courant)) ok = 0;
+                free(pending_idfs[_i]);
             }
             pending_count = 0;
             if (ok) printf("Declaration de variable(s) correcte.\n");
         }
-#line 1345 "Syn.tab.c"
+#line 1374 "Syn.tab.c"
     break;
 
   case 12: /* suite_definition: type OP_INIT valeur SEP_SEMICOLON  */
-#line 155 "Syn.y"
+#line 182 "Syn.y"
         {
-            /* $3 = valeur string */
             int ok = 1;
-            for (int i = 0; i < pending_count; i++) {
-                if (!ts_inserer_variable(pending_idfs[i], type_courant)) { ok = 0; free(pending_idfs[i]); continue; }
-                ts_marquer_init(pending_idfs[i]);
-                quadr(":=", (yyvsp[-1].sval), "", pending_idfs[i]);
-                ts_set_val(pending_idfs[i], (yyvsp[-1].sval));
-                free(pending_idfs[i]);
+            int _i;
+            for (_i = 0; _i < pending_count; _i++) {
+                if (!ts_inserer_variable(pending_idfs[_i], type_courant)) { ok = 0; free(pending_idfs[_i]); continue; }
+                ts_marquer_init(pending_idfs[_i]);
+                quadr(":=", (yyvsp[-1].sval), "", pending_idfs[_i]);
+                ts_set_val(pending_idfs[_i], (yyvsp[-1].sval));
+                free(pending_idfs[_i]);
             }
             pending_count = 0;
             if (ok) printf("Declaration de variable(s) avec initialisation correcte.\n");
         }
-#line 1363 "Syn.tab.c"
+#line 1392 "Syn.tab.c"
     break;
 
   case 13: /* suite_definition: SEP_LBRACKET type SEP_SEMICOLON NUM_INT SEP_RBRACKET SEP_SEMICOLON  */
-#line 169 "Syn.y"
+#line 196 "Syn.y"
         {
-            /* $4 = taille (NUM_INT) */
             if (pending_count != 1) {
                 printf(RED "ERREUR semantique: un tableau ne peut avoir qu'un seul nom, ligne %d, col %d" RESET "\n",
                        nb_ligne, nb_col);
@@ -1377,14 +1405,15 @@ yyreduce:
                 ts_inserer_tableau(pending_idfs[0], type_courant, (yyvsp[-2].ival));
                 printf("Declaration de tableau correcte.\n");
             }
-            for (int i = 0; i < pending_count; i++) free(pending_idfs[i]);
+            int _i;
+            for (_i = 0; _i < pending_count; _i++) free(pending_idfs[_i]);
             pending_count = 0;
         }
-#line 1384 "Syn.tab.c"
+#line 1413 "Syn.tab.c"
     break;
 
   case 14: /* decl_constante: CONST_MC IDF SEP_COLON type OP_INIT valeur SEP_SEMICOLON  */
-#line 189 "Syn.y"
+#line 216 "Syn.y"
         {
             if (ts_inserer_constante((yyvsp[-5].sval), type_courant)) {
                 ts_marquer_init((yyvsp[-5].sval));
@@ -1393,231 +1422,222 @@ yyreduce:
                 printf("Declaration de constante correcte.\n");
             }
         }
-#line 1397 "Syn.tab.c"
+#line 1426 "Syn.tab.c"
     break;
 
   case 15: /* liste_idf: IDF  */
-#line 201 "Syn.y"
+#line 228 "Syn.y"
         {
             if (pending_count < MAX_PENDING_IDF)
                 pending_idfs[pending_count++] = strdup((yyvsp[0].sval));
         }
-#line 1406 "Syn.tab.c"
+#line 1435 "Syn.tab.c"
     break;
 
   case 16: /* liste_idf: IDF SEP_PIPE liste_idf  */
-#line 206 "Syn.y"
+#line 233 "Syn.y"
         {
             if (pending_count < MAX_PENDING_IDF)
                 pending_idfs[pending_count++] = strdup((yyvsp[-2].sval));
         }
-#line 1415 "Syn.tab.c"
+#line 1444 "Syn.tab.c"
     break;
 
   case 17: /* type: INTEGER_MC  */
-#line 213 "Syn.y"
+#line 240 "Syn.y"
                    { type_courant = TYPE_INTEGER; }
-#line 1421 "Syn.tab.c"
+#line 1450 "Syn.tab.c"
     break;
 
   case 18: /* type: FLOAT_MC  */
-#line 214 "Syn.y"
+#line 241 "Syn.y"
                    { type_courant = TYPE_FLOAT;   }
-#line 1427 "Syn.tab.c"
+#line 1456 "Syn.tab.c"
     break;
 
   case 19: /* valeur: NUM_INT  */
-#line 219 "Syn.y"
+#line 246 "Syn.y"
         { (yyval.sval) = (char*)malloc(20); sprintf((yyval.sval), "%d", (yyvsp[0].ival)); }
-#line 1433 "Syn.tab.c"
+#line 1462 "Syn.tab.c"
     break;
 
   case 20: /* valeur: NUM_FLOAT  */
-#line 221 "Syn.y"
+#line 248 "Syn.y"
         { (yyval.sval) = (char*)malloc(20); sprintf((yyval.sval), "%f", (yyvsp[0].fval)); }
-#line 1439 "Syn.tab.c"
+#line 1468 "Syn.tab.c"
     break;
 
   case 21: /* valeur: SEP_LPAREN OP_ADD NUM_INT SEP_RPAREN  */
-#line 223 "Syn.y"
+#line 250 "Syn.y"
         { (yyval.sval) = (char*)malloc(20); sprintf((yyval.sval), "%d", (yyvsp[-1].ival)); }
-#line 1445 "Syn.tab.c"
+#line 1474 "Syn.tab.c"
     break;
 
   case 22: /* valeur: SEP_LPAREN OP_SUB NUM_INT SEP_RPAREN  */
-#line 225 "Syn.y"
+#line 252 "Syn.y"
         { (yyval.sval) = (char*)malloc(20); sprintf((yyval.sval), "%d", -(yyvsp[-1].ival)); }
-#line 1451 "Syn.tab.c"
+#line 1480 "Syn.tab.c"
     break;
 
   case 23: /* valeur: SEP_LPAREN OP_ADD NUM_FLOAT SEP_RPAREN  */
-#line 227 "Syn.y"
+#line 254 "Syn.y"
         { (yyval.sval) = (char*)malloc(20); sprintf((yyval.sval), "%f", (yyvsp[-1].fval)); }
-#line 1457 "Syn.tab.c"
+#line 1486 "Syn.tab.c"
     break;
 
   case 24: /* valeur: SEP_LPAREN OP_SUB NUM_FLOAT SEP_RPAREN  */
-#line 229 "Syn.y"
+#line 256 "Syn.y"
         { (yyval.sval) = (char*)malloc(20); sprintf((yyval.sval), "%f", -(yyvsp[-1].fval)); }
-#line 1463 "Syn.tab.c"
+#line 1492 "Syn.tab.c"
     break;
 
   case 33: /* instruction: error SEP_SEMICOLON  */
-#line 245 "Syn.y"
+#line 272 "Syn.y"
         { yyerrok; }
-#line 1469 "Syn.tab.c"
+#line 1498 "Syn.tab.c"
     break;
 
   case 34: /* sem_checkpoint: %empty  */
-#line 250 "Syn.y"
-        {
-            (yyval.ival) = semantic_errors;
-        }
-#line 1477 "Syn.tab.c"
+#line 277 "Syn.y"
+        { (yyval.ival) = semantic_errors; }
+#line 1504 "Syn.tab.c"
     break;
 
   case 35: /* instruction_affectation: IDF OP_ASSIGN sem_checkpoint expression SEP_SEMICOLON  */
-#line 257 "Syn.y"
-    {
-        int expr_has_error = (semantic_errors > (yyvsp[-2].ival));
+#line 282 "Syn.y"
+        {
+            int expr_has_error = (semantic_errors > (yyvsp[-2].ival));
 
-        if (!ts_est_declare((yyvsp[-4].sval))) {
-            printf(RED "ERREUR semantique: variable '%s' non declaree, "
-                   "ligne %d, col %d" RESET "\n", (yyvsp[-4].sval), nb_ligne, nb_col);
-            semantic_errors++;
-        } else if (ts_est_constante((yyvsp[-4].sval))) {
-            printf(RED "ERREUR semantique: modification de la constante '%s', "
-                   "ligne %d, col %d" RESET "\n", (yyvsp[-4].sval), nb_ligne, nb_col);
-            semantic_errors++;
-        } else if (expr_has_error) {
-            /* L'expression a deja leve une erreur semantique : ne pas valider l'affectation. */
-        } else {
-            /* Vérification compatibilité de types */
-            const char *type_dest = ts_get_type((yyvsp[-4].sval));  /* type de la variable */
-            const char *type_src  = ts_get_type((yyvsp[-1].sval));  /* type de l'expression */
-
-            /* Les deux sont connus ET différents → erreur */
-            if (type_dest != NULL && type_src != NULL
-                && strcmp(type_dest, type_src) != 0) {
-                printf(RED "ERREUR semantique: incompatibilite de types pour "
-                       "'%s' (%s) <-- expression (%s), ligne %d, col %d"
-                       RESET "\n",
-                       (yyvsp[-4].sval), type_dest, type_src, nb_ligne, nb_col);
+            if (!ts_est_declare((yyvsp[-4].sval))) {
+                printf(RED "ERREUR semantique: variable '%s' non declaree, "
+                       "ligne %d, col %d" RESET "\n", (yyvsp[-4].sval), nb_ligne, nb_col);
                 semantic_errors++;
+            } else if (ts_est_constante((yyvsp[-4].sval))) {
+                printf(RED "ERREUR semantique: modification de la constante '%s', "
+                       "ligne %d, col %d" RESET "\n", (yyvsp[-4].sval), nb_ligne, nb_col);
+                semantic_errors++;
+            } else if (expr_has_error) {
+                /* expression invalide : pas d'affectation */
             } else {
-                quadr(":=", (yyvsp[-1].sval), "", (yyvsp[-4].sval));
-                ts_marquer_init((yyvsp[-4].sval));
-                printf("Affectation correcte.\n");
+                const char *type_dest = ts_get_type((yyvsp[-4].sval));
+                const char *type_src  = ts_get_type((yyvsp[-1].sval));
+                if (type_dest != NULL && type_src != NULL
+                    && strcmp(type_dest, type_src) != 0) {
+                    printf(RED "ERREUR semantique: incompatibilite de types pour "
+                           "'%s' (%s) <-- expression (%s), ligne %d, col %d"
+                           RESET "\n",
+                           (yyvsp[-4].sval), type_dest, type_src, nb_ligne, nb_col);
+                    semantic_errors++;
+                } else {
+                    quadr(":=", (yyvsp[-1].sval), "", (yyvsp[-4].sval));
+                    ts_marquer_init((yyvsp[-4].sval));
+                    printf("Affectation correcte.\n");
+                }
             }
         }
-    }
-#line 1515 "Syn.tab.c"
+#line 1539 "Syn.tab.c"
     break;
 
   case 36: /* instruction_affectation: IDF SEP_LBRACKET sem_checkpoint expression SEP_RBRACKET OP_ASSIGN expression SEP_SEMICOLON  */
-#line 291 "Syn.y"
-    {
-        int expr_has_error = (semantic_errors > (yyvsp[-5].ival));
+#line 313 "Syn.y"
+        {
+            int expr_has_error = (semantic_errors > (yyvsp[-5].ival));
 
-        if (!ts_est_declare((yyvsp[-7].sval))) {
-            printf(RED "ERREUR semantique: tableau '%s' non declare, "
-                   "ligne %d, col %d" RESET "\n", (yyvsp[-7].sval), nb_ligne, nb_col);
-            semantic_errors++;
-        } else if (expr_has_error) {
-            /* Index ou valeur d'affectation invalide(s) : ne pas confirmer l'affectation. */
-        } else {
-            int idx_val = atoi((yyvsp[-4].sval));          /* valeur de l'index si littéral */
-            int taille  = ts_get_taille((yyvsp[-7].sval)); /* taille du tableau depuis la TS */
-
-            /* Index négatif détectable statiquement */
-            if (idx_val < 0) {
-                printf(RED "ERREUR semantique: index negatif (%d) pour le "
-                       "tableau '%s', ligne %d, col %d" RESET "\n",
-                       idx_val, (yyvsp[-7].sval), nb_ligne, nb_col);
+            if (!ts_est_declare((yyvsp[-7].sval))) {
+                printf(RED "ERREUR semantique: tableau '%s' non declare, "
+                       "ligne %d, col %d" RESET "\n", (yyvsp[-7].sval), nb_ligne, nb_col);
                 semantic_errors++;
-
-            /* Index hors limites détectable statiquement */
-            } else if (taille > 0 && idx_val >= taille) {
-                printf(RED "ERREUR semantique: index (%d) hors limites pour "
-                       "le tableau '%s' (taille %d), ligne %d, col %d"
-                       RESET "\n",
-                       idx_val, (yyvsp[-7].sval), taille, nb_ligne, nb_col);
-                semantic_errors++;
-
+            } else if (expr_has_error) {
+                /* index ou valeur invalide */
             } else {
-                char dest[100];
-                sprintf(dest, "%s[%s]", (yyvsp[-7].sval), (yyvsp[-4].sval));
-                quadr(":=", (yyvsp[-1].sval), "", dest);
-                printf("Affectation tableau correcte.\n");
+                int idx_val = atoi((yyvsp[-4].sval));
+                int taille  = ts_get_taille((yyvsp[-7].sval));
+
+                if (idx_val < 0) {
+                    printf(RED "ERREUR semantique: index negatif (%d) pour le "
+                           "tableau '%s', ligne %d, col %d" RESET "\n",
+                           idx_val, (yyvsp[-7].sval), nb_ligne, nb_col);
+                    semantic_errors++;
+                } else if (taille > 0 && idx_val >= taille) {
+                    printf(RED "ERREUR semantique: index (%d) hors limites pour "
+                           "le tableau '%s' (taille %d), ligne %d, col %d"
+                           RESET "\n",
+                           idx_val, (yyvsp[-7].sval), taille, nb_ligne, nb_col);
+                    semantic_errors++;
+                } else {
+                    char dest[100];
+                    sprintf(dest, "%s[%s]", (yyvsp[-7].sval), (yyvsp[-4].sval));
+                    quadr(":=", (yyvsp[-1].sval), "", dest);
+                    printf("Affectation tableau correcte.\n");
+                }
             }
         }
-    }
-#line 1556 "Syn.tab.c"
+#line 1576 "Syn.tab.c"
     break;
 
   case 37: /* $@1: %empty  */
-#line 332 "Syn.y"
+#line 350 "Syn.y"
         {
-            /* BZ: si condition fausse, sauter */
             quadr("BZ", (yyvsp[-4].sval), "", "");
         }
-#line 1565 "Syn.tab.c"
+#line 1584 "Syn.tab.c"
     break;
 
   case 39: /* $@2: %empty  */
-#line 342 "Syn.y"
+#line 359 "Syn.y"
         {
-            /* BR: sauter le bloc else */
             quadr("BR", "", "", "");
-            /* Patcher le BZ vers le debut du else */
+            /* patcher le BZ vers le debut du else */
             char idx_str[20];
             sprintf(idx_str, "%d", qc);
-            for (int i = qc - 2; i >= 0; i--) { /*br -1, else -2*/
-                if (strcmp(quad[i].oper, "BZ") == 0 && strlen(quad[i].res) == 0) {
-                    updateQuad(i, 3, idx_str);
+            int _i;
+            for (_i = qc - 2; _i >= 0; _i--) {
+                if (strcmp(quad[_i].oper, "BZ") == 0 && strlen(quad[_i].res) == 0) {
+                    updateQuad(_i, 3, idx_str);
                     break;
                 }
             }
         }
-#line 1583 "Syn.tab.c"
+#line 1602 "Syn.tab.c"
     break;
 
   case 40: /* suite_if: ELSE_MC $@2 SEP_LBRACE liste_instructions SEP_RBRACE ENDIF_MC SEP_SEMICOLON  */
-#line 357 "Syn.y"
+#line 374 "Syn.y"
         {
-            /* Patcher le BR vers apres le else */
+            /* patcher le BR vers apres le else */
             char idx_str[20];
             sprintf(idx_str, "%d", qc);
-            for (int i = qc - 1; i >= 0; i--) {
-                if (strcmp(quad[i].oper, "BR") == 0 && strlen(quad[i].res) == 0) {
-                    updateQuad(i, 3, idx_str);
+            int _i;
+            for (_i = qc - 1; _i >= 0; _i--) {
+                if (strcmp(quad[_i].oper, "BR") == 0 && strlen(quad[_i].res) == 0) {
+                    updateQuad(_i, 3, idx_str);
                     break;
                 }
             }
             printf("Instruction if-else correcte.\n");
         }
-#line 1600 "Syn.tab.c"
+#line 1620 "Syn.tab.c"
     break;
 
   case 41: /* suite_if: ENDIF_MC SEP_SEMICOLON  */
-#line 370 "Syn.y"
+#line 388 "Syn.y"
         {
-            /* Patcher le BZ vers apres le then cas if sans lese */
             char idx_str[20];
             sprintf(idx_str, "%d", qc);
-            for (int i = qc - 1; i >= 0; i--) {
-                if (strcmp(quad[i].oper, "BZ") == 0 && strlen(quad[i].res) == 0) {
-                    updateQuad(i, 3, idx_str);
+            int _i;
+            for (_i = qc - 1; _i >= 0; _i--) {
+                if (strcmp(quad[_i].oper, "BZ") == 0 && strlen(quad[_i].res) == 0) {
+                    updateQuad(_i, 3, idx_str);
                     break;
                 }
             }
             printf("Instruction if correcte.\n");
         }
-#line 1617 "Syn.tab.c"
+#line 1637 "Syn.tab.c"
     break;
 
   case 42: /* $@3: %empty  */
-#line 386 "Syn.y"
+#line 404 "Syn.y"
       {
             if (while_top < MAX_WHILE_NEST - 1) {
                 while_top++;
@@ -1625,96 +1645,100 @@ yyreduce:
                 while_bz_stack[while_top] = -1;
             }
       }
-#line 1629 "Syn.tab.c"
+#line 1649 "Syn.tab.c"
     break;
 
   case 43: /* $@4: %empty  */
-#line 394 "Syn.y"
+#line 412 "Syn.y"
         {
-            /* si condition fausse, sauter hors de la boucle */
             quadr("BZ", (yyvsp[-1].sval), "", "");
-
-            if (while_top >= 0) {
+            if (while_top >= 0)
                 while_bz_stack[while_top] = qc - 1;
-            }
         }
-#line 1642 "Syn.tab.c"
+#line 1659 "Syn.tab.c"
     break;
 
   case 44: /* instruction_loop_while: LOOP_MC WHILE_MC SEP_LPAREN $@3 condition SEP_RPAREN $@4 SEP_LBRACE liste_instructions SEP_RBRACE ENDLOOP_MC SEP_SEMICOLON  */
-#line 404 "Syn.y"
+#line 419 "Syn.y"
         {
             if (while_top >= 0) {
-                /* BR vers le debut de condition de CE while (meme en imbrication) */
                 char debut_str[20];
                 sprintf(debut_str, "%d", while_start_stack[while_top]);
                 quadr("BR", "", "", debut_str);
 
-                /* Patcher le BZ de CE while vers l'instruction suivant endloop */
                 char fin_str[20];
                 sprintf(fin_str, "%d", qc);
-                if (while_bz_stack[while_top] >= 0) {
+                if (while_bz_stack[while_top] >= 0)
                     updateQuad(while_bz_stack[while_top], 3, fin_str);
-                }
 
                 while_top--;
             }
-
             printf("Boucle while correcte.\n");
         }
-#line 1666 "Syn.tab.c"
+#line 1679 "Syn.tab.c"
     break;
 
   case 45: /* $@5: %empty  */
-#line 427 "Syn.y"
+#line 453 "Syn.y"
         {
             if (!ts_est_declare((yyvsp[-4].sval))) {
                 printf(RED "ERREUR semantique: variable '%s' non declaree, ligne %d, col %d" RESET "\n",
                        (yyvsp[-4].sval), nb_ligne, nb_col);
                 semantic_errors++;
             }
-            /* Initialiser i <- debut */
+
+            /* Initialiser : var <- debut */
             quadr(":=", (yyvsp[-2].sval), "", (yyvsp[-4].sval));
             ts_marquer_init((yyvsp[-4].sval));
-            /* Condition: i <= fin */
+
+            /* Empiler le contexte for AVANT d'emettre la condition */
+            if (for_top < MAX_FOR_NEST - 1) {
+                for_top++;
+                for_cond_stack[for_top] = qc;   /* indice du prochain quad = debut condition */
+                for_bz_stack[for_top]   = -1;
+            }
+
+            /* Condition : var <= fin */
             char *tmp = strdup(nouveau_temp());
             quadr("<=", (yyvsp[-4].sval), (yyvsp[0].sval), tmp);
+
+            /* BZ de sortie (non patche pour l'instant) */
             quadr("BZ", tmp, "", "");
+            if (for_top >= 0)
+                for_bz_stack[for_top] = qc - 1;  /* indice du BZ qu'on vient d'emettre */
         }
-#line 1685 "Syn.tab.c"
+#line 1711 "Syn.tab.c"
     break;
 
   case 46: /* instruction_for: FOR_MC IDF IN_MC expression TO_MC expression $@5 SEP_LBRACE liste_instructions SEP_RBRACE ENDFOR_MC SEP_SEMICOLON  */
-#line 443 "Syn.y"
+#line 482 "Syn.y"
         {
-            /* Incrementer i <- i + 1 */
-            char *tmp = strdup(nouveau_temp());
-            quadr("+", (yyvsp[-10].sval), "1", tmp); /*incrementer avec 1*/
-            quadr(":=", tmp, "", (yyvsp[-10].sval));/*affecter a IDF*/
-            /* BR vers la condition */
-            /* Trouver le BZ non patche */
-            int bz_idx = -1;
-            for (int i = qc - 1; i >= 0; i--) {
-                if (strcmp(quad[i].oper, "BZ") == 0 && strlen(quad[i].res) == 0) {
-                    bz_idx = i;
-                    break;
-                }
-            }
-            if (bz_idx >= 0) {
+            if (for_top >= 0) {
+                /* Incrementer : var <- var + 1 */
+                char *tmp = strdup(nouveau_temp());
+                quadr("+", (yyvsp[-10].sval), "1", tmp);
+                quadr(":=", tmp, "", (yyvsp[-10].sval));
+
+                /* BR vers le debut REEL de la condition (enregistre sur la pile) */
                 char cond_str[20];
-                sprintf(cond_str, "%d", bz_idx - 1);
+                sprintf(cond_str, "%d", for_cond_stack[for_top]);
                 quadr("BR", "", "", cond_str);
+
+                /* Patcher le BZ de CE for vers apres le BR (sortie boucle) */
                 char fin_str[20];
                 sprintf(fin_str, "%d", qc);
-                updateQuad(bz_idx, 3, fin_str);
+                if (for_bz_stack[for_top] >= 0)
+                    updateQuad(for_bz_stack[for_top], 3, fin_str);
+
+                for_top--;
             }
             printf("Boucle for correcte.\n");
         }
-#line 1714 "Syn.tab.c"
+#line 1738 "Syn.tab.c"
     break;
 
   case 47: /* instruction_input: INPUT_MC SEP_LPAREN IDF SEP_RPAREN SEP_SEMICOLON  */
-#line 471 "Syn.y"
+#line 508 "Syn.y"
         {
             if (!ts_est_declare((yyvsp[-2].sval))) {
                 printf(RED "ERREUR semantique: variable '%s' non declaree, ligne %d, col %d" RESET "\n",
@@ -1726,140 +1750,139 @@ yyreduce:
                 printf("Instruction input correcte.\n");
             }
         }
-#line 1730 "Syn.tab.c"
+#line 1754 "Syn.tab.c"
     break;
 
   case 48: /* instruction_output: OUT_MC SEP_LPAREN liste_out SEP_RPAREN SEP_SEMICOLON  */
-#line 486 "Syn.y"
+#line 523 "Syn.y"
         { printf("Instruction out correcte.\n"); }
-#line 1736 "Syn.tab.c"
+#line 1760 "Syn.tab.c"
     break;
 
   case 51: /* element_out: STRING  */
-#line 495 "Syn.y"
+#line 532 "Syn.y"
                  { quadr("out", (yyvsp[0].sval), "", ""); }
-#line 1742 "Syn.tab.c"
+#line 1766 "Syn.tab.c"
     break;
 
   case 52: /* element_out: IDF  */
-#line 496 "Syn.y"
-          {
-    if (!ts_est_declare((yyvsp[0].sval))) {
-        printf(RED "ERREUR semantique: variable '%s' non declaree, "
-               "ligne %d, col %d" RESET "\n", (yyvsp[0].sval), nb_ligne, nb_col);
-        semantic_errors++;
-    } else if (!ts_est_initialise((yyvsp[0].sval))) {
-        printf(RED "ERREUR semantique: variable '%s' utilisee sans "
-               "initialisation, ligne %d, col %d" RESET "\n",
-               (yyvsp[0].sval), nb_ligne, nb_col);
-        semantic_errors++;
-    } else {
-        quadr("out", (yyvsp[0].sval), "", "");  /* ← quad seulement si tout est ok */
-    }
-}
-#line 1761 "Syn.tab.c"
-    break;
-
-  case 53: /* element_out: NUM_INT  */
-#line 510 "Syn.y"
-                 {
-                    char s[20]; sprintf(s, "%d", (yyvsp[0].ival));
-                    quadr("out", s, "", "");
-                 }
-#line 1770 "Syn.tab.c"
-    break;
-
-  case 54: /* element_out: NUM_FLOAT  */
-#line 514 "Syn.y"
-                 {
-                    char s[20]; sprintf(s, "%f", (yyvsp[0].fval));
-                    quadr("out", s, "", "");
-                 }
-#line 1779 "Syn.tab.c"
-    break;
-
-  case 55: /* condition: expression OP_EQ expression  */
-#line 523 "Syn.y"
-        { (yyval.sval) = strdup(nouveau_temp()); quadr("==", (yyvsp[-2].sval), (yyvsp[0].sval), (yyval.sval)); }
+#line 534 "Syn.y"
+        {
+            if (!ts_est_declare((yyvsp[0].sval))) {
+                printf(RED "ERREUR semantique: variable '%s' non declaree, "
+                       "ligne %d, col %d" RESET "\n", (yyvsp[0].sval), nb_ligne, nb_col);
+                semantic_errors++;
+            } else if (!ts_est_initialise((yyvsp[0].sval))) {
+                printf(RED "ERREUR semantique: variable '%s' utilisee sans "
+                       "initialisation, ligne %d, col %d" RESET "\n",
+                       (yyvsp[0].sval), nb_ligne, nb_col);
+                semantic_errors++;
+            } else {
+                quadr("out", (yyvsp[0].sval), "", "");
+            }
+        }
 #line 1785 "Syn.tab.c"
     break;
 
-  case 56: /* condition: expression OP_NE expression  */
-#line 525 "Syn.y"
-        { (yyval.sval) = strdup(nouveau_temp()); quadr("!=", (yyvsp[-2].sval), (yyvsp[0].sval), (yyval.sval)); }
-#line 1791 "Syn.tab.c"
+  case 53: /* element_out: NUM_INT  */
+#line 549 "Syn.y"
+        {
+            char s[20]; sprintf(s, "%d", (yyvsp[0].ival));
+            quadr("out", s, "", "");
+        }
+#line 1794 "Syn.tab.c"
     break;
 
-  case 57: /* condition: expression OP_LT expression  */
-#line 527 "Syn.y"
-        { (yyval.sval) = strdup(nouveau_temp()); quadr("<",  (yyvsp[-2].sval), (yyvsp[0].sval), (yyval.sval)); }
-#line 1797 "Syn.tab.c"
-    break;
-
-  case 58: /* condition: expression OP_GT expression  */
-#line 529 "Syn.y"
-        { (yyval.sval) = strdup(nouveau_temp()); quadr(">",  (yyvsp[-2].sval), (yyvsp[0].sval), (yyval.sval)); }
+  case 54: /* element_out: NUM_FLOAT  */
+#line 554 "Syn.y"
+        {
+            char s[20]; sprintf(s, "%f", (yyvsp[0].fval));
+            quadr("out", s, "", "");
+        }
 #line 1803 "Syn.tab.c"
     break;
 
-  case 59: /* condition: expression OP_LE expression  */
-#line 531 "Syn.y"
-        { (yyval.sval) = strdup(nouveau_temp()); quadr("<=", (yyvsp[-2].sval), (yyvsp[0].sval), (yyval.sval)); }
+  case 55: /* condition: expression OP_EQ expression  */
+#line 562 "Syn.y"
+        { (yyval.sval) = strdup(nouveau_temp()); quadr("==", (yyvsp[-2].sval), (yyvsp[0].sval), (yyval.sval)); }
 #line 1809 "Syn.tab.c"
     break;
 
-  case 60: /* condition: expression OP_GE expression  */
-#line 533 "Syn.y"
-        { (yyval.sval) = strdup(nouveau_temp()); quadr(">=", (yyvsp[-2].sval), (yyvsp[0].sval), (yyval.sval)); }
+  case 56: /* condition: expression OP_NE expression  */
+#line 564 "Syn.y"
+        { (yyval.sval) = strdup(nouveau_temp()); quadr("!=", (yyvsp[-2].sval), (yyvsp[0].sval), (yyval.sval)); }
 #line 1815 "Syn.tab.c"
     break;
 
-  case 61: /* condition: condition AND condition  */
-#line 535 "Syn.y"
-        { (yyval.sval) = strdup(nouveau_temp()); quadr("AND", (yyvsp[-2].sval), (yyvsp[0].sval), (yyval.sval)); }
+  case 57: /* condition: expression OP_LT expression  */
+#line 566 "Syn.y"
+        { (yyval.sval) = strdup(nouveau_temp()); quadr("<",  (yyvsp[-2].sval), (yyvsp[0].sval), (yyval.sval)); }
 #line 1821 "Syn.tab.c"
     break;
 
-  case 62: /* condition: condition OR condition  */
-#line 537 "Syn.y"
-        { (yyval.sval) = strdup(nouveau_temp()); quadr("OR",  (yyvsp[-2].sval), (yyvsp[0].sval), (yyval.sval)); }
+  case 58: /* condition: expression OP_GT expression  */
+#line 568 "Syn.y"
+        { (yyval.sval) = strdup(nouveau_temp()); quadr(">",  (yyvsp[-2].sval), (yyvsp[0].sval), (yyval.sval)); }
 #line 1827 "Syn.tab.c"
     break;
 
-  case 63: /* condition: NON SEP_LPAREN condition SEP_RPAREN  */
-#line 539 "Syn.y"
-        { (yyval.sval) = strdup(nouveau_temp()); quadr("NON", (yyvsp[-1].sval), "",  (yyval.sval)); }
+  case 59: /* condition: expression OP_LE expression  */
+#line 570 "Syn.y"
+        { (yyval.sval) = strdup(nouveau_temp()); quadr("<=", (yyvsp[-2].sval), (yyvsp[0].sval), (yyval.sval)); }
 #line 1833 "Syn.tab.c"
     break;
 
-  case 64: /* condition: SEP_LPAREN condition SEP_RPAREN  */
-#line 541 "Syn.y"
-        { (yyval.sval) = (yyvsp[-1].sval); }
+  case 60: /* condition: expression OP_GE expression  */
+#line 572 "Syn.y"
+        { (yyval.sval) = strdup(nouveau_temp()); quadr(">=", (yyvsp[-2].sval), (yyvsp[0].sval), (yyval.sval)); }
 #line 1839 "Syn.tab.c"
     break;
 
-  case 65: /* expression: expression OP_ADD expression  */
-#line 547 "Syn.y"
-        { (yyval.sval) = strdup(nouveau_temp()); quadr("+", (yyvsp[-2].sval), (yyvsp[0].sval), (yyval.sval)); }
+  case 61: /* condition: condition AND condition  */
+#line 574 "Syn.y"
+        { (yyval.sval) = strdup(nouveau_temp()); quadr("AND", (yyvsp[-2].sval), (yyvsp[0].sval), (yyval.sval)); }
 #line 1845 "Syn.tab.c"
     break;
 
-  case 66: /* expression: expression OP_SUB expression  */
-#line 549 "Syn.y"
-        { (yyval.sval) = strdup(nouveau_temp()); quadr("-", (yyvsp[-2].sval), (yyvsp[0].sval), (yyval.sval)); }
+  case 62: /* condition: condition OR condition  */
+#line 576 "Syn.y"
+        { (yyval.sval) = strdup(nouveau_temp()); quadr("OR",  (yyvsp[-2].sval), (yyvsp[0].sval), (yyval.sval)); }
 #line 1851 "Syn.tab.c"
     break;
 
-  case 67: /* expression: expression OP_MUL expression  */
-#line 551 "Syn.y"
-        { (yyval.sval) = strdup(nouveau_temp()); quadr("*", (yyvsp[-2].sval), (yyvsp[0].sval), (yyval.sval)); }
+  case 63: /* condition: NON SEP_LPAREN condition SEP_RPAREN  */
+#line 578 "Syn.y"
+        { (yyval.sval) = strdup(nouveau_temp()); quadr("NON", (yyvsp[-1].sval), "",  (yyval.sval)); }
 #line 1857 "Syn.tab.c"
     break;
 
+  case 64: /* condition: SEP_LPAREN condition SEP_RPAREN  */
+#line 580 "Syn.y"
+        { (yyval.sval) = (yyvsp[-1].sval); }
+#line 1863 "Syn.tab.c"
+    break;
+
+  case 65: /* expression: expression OP_ADD expression  */
+#line 585 "Syn.y"
+        { (yyval.sval) = strdup(nouveau_temp()); quadr("+", (yyvsp[-2].sval), (yyvsp[0].sval), (yyval.sval)); }
+#line 1869 "Syn.tab.c"
+    break;
+
+  case 66: /* expression: expression OP_SUB expression  */
+#line 587 "Syn.y"
+        { (yyval.sval) = strdup(nouveau_temp()); quadr("-", (yyvsp[-2].sval), (yyvsp[0].sval), (yyval.sval)); }
+#line 1875 "Syn.tab.c"
+    break;
+
+  case 67: /* expression: expression OP_MUL expression  */
+#line 589 "Syn.y"
+        { (yyval.sval) = strdup(nouveau_temp()); quadr("*", (yyvsp[-2].sval), (yyvsp[0].sval), (yyval.sval)); }
+#line 1881 "Syn.tab.c"
+    break;
+
   case 68: /* expression: expression OP_DIV expression  */
-#line 553 "Syn.y"
+#line 591 "Syn.y"
         {
-            /* Verification division par zero: litteral ou constante de valeur 0 */
             int div_zero = (strcmp((yyvsp[0].sval), "0") == 0 || strcmp((yyvsp[0].sval), "0.0") == 0);
             if (!div_zero) {
                 const char *v = ts_get_val((yyvsp[0].sval));
@@ -1873,42 +1896,48 @@ yyreduce:
             }
             (yyval.sval) = strdup(nouveau_temp()); quadr("/", (yyvsp[-2].sval), (yyvsp[0].sval), (yyval.sval));
         }
-#line 1877 "Syn.tab.c"
+#line 1900 "Syn.tab.c"
     break;
 
   case 69: /* expression: SEP_LPAREN expression SEP_RPAREN  */
-#line 569 "Syn.y"
+#line 606 "Syn.y"
         { (yyval.sval) = (yyvsp[-1].sval); }
-#line 1883 "Syn.tab.c"
+#line 1906 "Syn.tab.c"
     break;
 
   case 70: /* expression: SEP_LPAREN OP_ADD expression SEP_RPAREN  */
-#line 571 "Syn.y"
+#line 608 "Syn.y"
         { (yyval.sval) = (yyvsp[-1].sval); }
-#line 1889 "Syn.tab.c"
+#line 1912 "Syn.tab.c"
     break;
 
   case 71: /* expression: SEP_LPAREN OP_SUB expression SEP_RPAREN  */
-#line 573 "Syn.y"
+#line 610 "Syn.y"
         { (yyval.sval) = strdup(nouveau_temp()); quadr("NEG", (yyvsp[-1].sval), "", (yyval.sval)); }
-#line 1895 "Syn.tab.c"
+#line 1918 "Syn.tab.c"
     break;
 
   case 72: /* expression: IDF  */
-#line 575 "Syn.y"
+#line 612 "Syn.y"
         {
             if (!ts_est_declare((yyvsp[0].sval))) {
                 printf(RED "ERREUR semantique: variable '%s' non declaree, ligne %d, col %d" RESET "\n",
                        (yyvsp[0].sval), nb_ligne, nb_col);
                 semantic_errors++;
+            } else if (!ts_est_initialise((yyvsp[0].sval))) {
+                /* BUG 5 CORRIGE : verifier l'initialisation aussi dans les expressions
+                   arithmetiques, pas uniquement dans out(). */
+                printf(RED "ERREUR semantique: variable '%s' utilisee sans initialisation, ligne %d, col %d" RESET "\n",
+                       (yyvsp[0].sval), nb_ligne, nb_col);
+                semantic_errors++;
             }
             (yyval.sval) = (yyvsp[0].sval);
         }
-#line 1908 "Syn.tab.c"
+#line 1937 "Syn.tab.c"
     break;
 
   case 73: /* expression: IDF SEP_LBRACKET expression SEP_RBRACKET  */
-#line 584 "Syn.y"
+#line 627 "Syn.y"
         {
             if (!ts_est_declare((yyvsp[-3].sval))) {
                 printf(RED "ERREUR semantique: tableau '%s' non declare, ligne %d, col %d" RESET "\n",
@@ -1918,29 +1947,29 @@ yyreduce:
             (yyval.sval) = strdup(nouveau_temp());
             quadr("TAB", (yyvsp[-3].sval), (yyvsp[-1].sval), (yyval.sval));
         }
-#line 1922 "Syn.tab.c"
+#line 1951 "Syn.tab.c"
     break;
 
   case 74: /* expression: NUM_INT  */
-#line 594 "Syn.y"
+#line 637 "Syn.y"
         {
             (yyval.sval) = (char*)malloc(20);
             sprintf((yyval.sval), "%d", (yyvsp[0].ival));
         }
-#line 1931 "Syn.tab.c"
+#line 1960 "Syn.tab.c"
     break;
 
   case 75: /* expression: NUM_FLOAT  */
-#line 599 "Syn.y"
+#line 642 "Syn.y"
         {
             (yyval.sval) = (char*)malloc(20);
             sprintf((yyval.sval), "%f", (yyvsp[0].fval));
         }
-#line 1940 "Syn.tab.c"
+#line 1969 "Syn.tab.c"
     break;
 
 
-#line 1944 "Syn.tab.c"
+#line 1973 "Syn.tab.c"
 
       default: break;
     }
@@ -2133,7 +2162,7 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 605 "Syn.y"
+#line 648 "Syn.y"
 
 
 int main()

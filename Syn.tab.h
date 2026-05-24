@@ -112,10 +112,10 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 32 "Syn.y"
+#line 52 "Syn.y"
 
     int    ival;
-    float  fval; /*flex stocke la val dans yylval et bison la recupere de $*/
+    float  fval;
     char*  sval;
 
 #line 122 "Syn.tab.h"
