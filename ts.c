@@ -1,10 +1,9 @@
-/* ================================================================
-Fonction de hachage : FNV-1  (Fowler–Noll–Vo, variante 1)
+/* Fonction de hachage : FNV-1  (Fowler–Noll–Vo, variante 1)
      hash = FNV_OFFSET_BASIS
      pour chaque octet b du nom :
          hash = hash * FNV_PRIME
          hash = hash XOR b
-   ================================================================ */
+    */
 #include "ts.h"
 #define FNV_OFFSET_BASIS 2166136261u  /* valeur initiale du hash FNV-1  */
 #define FNV_PRIME        16777619u    /* nombre premier FNV pour 32 bits */

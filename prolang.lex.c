@@ -1,5 +1,6 @@
+#line 1 "prolang.lex.c"
 
-#line 2 "lex.yy.c"
+#line 3 "prolang.lex.c"
 
 #define  YY_INT_ALIGNED short int
 
@@ -570,9 +571,9 @@ char *yytext;
     int nb_col   = 1;
     #define RED   "\033[1;31m"
     #define RESET "\033[0m"
-#line 573 "lex.yy.c"
+#line 574 "prolang.lex.c"
 
-#line 575 "lex.yy.c"
+#line 576 "prolang.lex.c"
 
 #define INITIAL 0
 #define COMMENT 1
@@ -793,7 +794,7 @@ YY_DECL
 #line 25 "prolang.l"
 
 
-#line 796 "lex.yy.c"
+#line 797 "prolang.lex.c"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -1205,7 +1206,7 @@ YY_RULE_SETUP
 #line 145 "prolang.l"
 ECHO;
 	YY_BREAK
-#line 1208 "lex.yy.c"
+#line 1209 "prolang.lex.c"
 case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(COMMENT):
 	yyterminate();

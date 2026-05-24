@@ -14,9 +14,7 @@ typedef enum {
     TYPE_FLOAT      /* type réel    (float)   */
 } TypeVar;
 
-/* ================================================================
-   NOEUD de la liste chaînée  (entrée dans la table des symboles)
-   ================================================================ */
+   // NOEUD de la liste chaînée  (entrée dans la table des symboles)
 typedef struct NoeudTS {
     char  name[MAX_IDF + 1]; /* nom de l'identificateur / constante / tableau */
     char  code[10];          /* catégorie : "IDF", "CONST", "TABLEAU"          */
