@@ -11,12 +11,9 @@
 #define YLW  "\033[1;33m"
 #define RESET "\033[0m"
 
-/* 
-   UTILITAIRES INTERNES
- */
 
 /*
- est_nombre : verifie si la chaine s represente un nombre valide
+ est_nombre : verifie ida la chaine s represente un nombre valide
               (entier ou flottant, avec signe optionnel).
               on verifie que c'est un nombre avant de simplifier x+0=x
  */
@@ -135,9 +132,6 @@ static int est_redefini_entre(const char *var, int debut, int fin)
 /*
  formater_nombre : convertit un double en chaine de caracteres.
  Si la valeur est entiere, l'affiche sans decimale (ex: 4 et non 4.000000).
-
- FIX : utilise long long au lieu de long pour eviter les debordements
- sur les valeurs superieures a 2^31 (ex: constantes flottantes larges).
  */
 static void formater_nombre(double v, char *buf)
 {
@@ -149,12 +143,6 @@ static void formater_nombre(double v, char *buf)
  nom_base_tableau : si res est un acces tableau de la forme "Tab[indice]",
  extrait uniquement le nom de base "Tab" dans buf.
  Retourne buf si c'est un tableau, sinon retourne res inchange.
-
- POURQUOI : la passe 7 compare le res d'une affectation avec les variables
- lues en operande. Les TAB utilisent "Tabfloat" en op1, mais les affectations
- tableau ecrivent "Tabfloat[i]" en res. Sans extraction du nom de base,
- strcmp("Tabfloat[i]", "Tabfloat") echoue => le tableau est faussement
- considere comme mort et supprime, alors qu'il est encore lu.
  */
 static const char *nom_base_tableau(const char *res, char *buf)
 {
@@ -311,12 +299,6 @@ static int simplification_algebrique(void)
    une addition ou soustraction avec une constante, et que le
    temporaire intermediaire n'est utilise qu'une seule fois,
    on peut fusionner les deux en un seul en calculant le decalage net.
-
-   Pattern detecte (T utilise une seule fois) :
-     quad[i] : T  = X  +/-  C1
-     quad[j] : R  = T  +/-  C2
-   => quad[j] : R  = X  +/-  (C1 op C2)   (calcul net a la compilation)
-      quad[i] : NOP                         (supprime)
 
    Exemples : on fusuionne
      t10 = j + 1
@@ -585,12 +567,7 @@ static int elimination_expressions_redondantes(void)
         int est_comp  = strcmp(op,"==")==0 || strcmp(op,"!=")==0
                      || strcmp(op,"<=")==0 || strcmp(op,">=")==0
                      || strcmp(op,"<") ==0 || strcmp(op,">") ==0;
-        /* FIX CSE : inclure les lectures de tableau (TAB) dans la CSE.
-           TAB Tabint[i] recalcule plusieurs fois avec le meme indice
-           dans le meme bloc de base => redondant, on peut reutiliser
-           le premier resultat.
-           ATTENTION : une ecriture tableau (:=, val, , Tab[idx]) invalide
-           toutes les entrees TAB de ce tableau dans la table. */
+       
         int est_tab   = strcmp(op,"TAB") == 0;
 
         if (est_arith || est_comp || est_tab) {
@@ -638,14 +615,8 @@ static int elimination_expressions_redondantes(void)
             }
 
         } else if (strcmp(op, ":=") == 0) {
-            /* Une affectation peut changer la valeur de res :
-               invalider toutes les expressions qui en dependent */
+            
 
-            /* FIX CSE tableaux : si res est un acces tableau "Tab[idx]",
-               invalider toutes les entrees TAB dont l'operande1 est ce
-               meme tableau de base. Ex: Tabint[i] := val invalide toutes
-               les entrees TAB de Tabint dans la table CSE, car on ne sait
-               plus si la valeur lue sera la meme apres ecriture. */
             char base_res_buf[100];
             const char *base_res = nom_base_tableau(res, base_res_buf);
             int res_est_tableau = (base_res != res);
@@ -705,13 +676,6 @@ static int elimination_variables_mortes(void)
         /* Les operandes de BZ (cible numerique dans res) ne sont pas des vars */
     }
 
-    /*
-     * Supprimer uniquement les affectations ":=" vers des variables
-     * utilisateur qui ne sont JAMAIS lues nulle part.
-     * FIX BUG TABLEAUX : pour "Tabfloat[i]" en res, on compare le nom
-     * de base "Tabfloat" (extrait par nom_base_tableau) avec la liste
-     * des variables lues, pas la chaine complete "Tabfloat[i]".
-     */
     for (i = 0; i < qc; i++) {
         if (a_effet_de_bord(i)) continue;
         if (strcmp(quad[i].oper, ":=") != 0) continue;
@@ -881,8 +845,7 @@ void optimiser_quadruplets(void)
         /* Passe 2 : simplifier les operations algebriques triviales */
         modifie |= simplification_algebrique();
 
-        /* Passe 3 : fusionner deux +/- de constantes consecutives
-           (FIX : ne pas fusionner si le temporaire est un indice tableau) */
+        /* Passe 3 : fusionner deux +/- de constantes consecutives*/
         modifie |= simplification_constantes_chainees();
 
         /* Passe 4 : fusionner T calcule + affectation immediate */
@@ -891,19 +854,16 @@ void optimiser_quadruplets(void)
         /* Passe 5 : propager les copies (dst:=src => remplacer dst par src) */
         modifie |= propagation_copie();
 
-          /* Passe 6 : propager les expressions a usage unique vers leur site
-           (FIX : ne pas propager si le temporaire est un indice tableau) */
+          /* Passe 6 : propager les expressions a usage unique vers leur site*/
         modifie |= propagation_expression();
 
         /* Passe 7 : eliminer les recalculs d'expressions deja disponibles */
         modifie |= elimination_expressions_redondantes();
 
-          /* Passe 8 : supprimer les variables utilisateur jamais lues
-           (FIX tableaux : compare le nom de base, pas "Tab[i]") */
+        /* Passe 8 : supprimer les variables utilisateur jamais lues*/
         modifie |= elimination_variables_mortes();
 
-          /* Passe 9 : supprimer les NOP et les calculs morts + corriger sauts
-           (FIX remappage BZ/BR + FIX BR vers instruction suivante) */
+          /* Passe 9 : supprimer les NOP et les calculs morts + corriger sauts*/
         modifie |= elimination_code_inutile();
 
         iterations++;

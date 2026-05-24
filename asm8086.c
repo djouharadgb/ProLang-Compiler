@@ -408,9 +408,7 @@ static void emettre_segment_donnees(FILE *f)
     EMIT("");
 }
 
-/* =========================================================
-   PROCEDURES UTILITAIRES (print / read)
-   ========================================================= */
+/*  PROCEDURES  (print / read)*/
 
 /* Procedure d'affichage d'un entier (AX) via DOS INT 21h */
 static void emettre_proc_print(FILE *f)
@@ -857,7 +855,7 @@ static void traduire_quadruplet(FILE *f, int idx, int *marque)
 void generer_asm(const char *nom_fichier)
 {
     if (!nom_fichier || !nom_fichier[0])
-        nom_fichier = "sortie.asm";
+        nom_fichier = "sortie_djo.asm";
 
     FILE *f = fopen(nom_fichier, "w");
     if (!f) {

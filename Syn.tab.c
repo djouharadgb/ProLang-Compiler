@@ -1610,7 +1610,7 @@ yyreduce:
             printf("\n=== Code intermediaire APRES optimisation ===\n");
             afficher_qdr();
             if (semantic_errors == 0) {
-                generer_asm("sortie.asm");
+                generer_asm(NULL);
             } else {
                 printf("Generation assembleur ignoree (erreurs semantiques).\n");
             }

@@ -235,7 +235,7 @@ Quad 72 BR      : cible 51 → 41
 Quad 75 BZ T42  : cible 88 → 72
 Quad 87 BR      : cible 74 → 61
 
-
+-------------------------------------------
 Quad 35  Passe 6 (élimination expression redondante / CSE) :
 TAB Tabint[i] déjà calculé au quad 31 dans T16
 
@@ -246,7 +246,7 @@ AVANT :
 APRÈS :
 28 - (>, T16, 10, T20)   ← T19 supprimé, T16 réutilisé directement
 
-
+--------------------------------------------------
 Quad 82  Passe 6 (élimination expression redondante / CSE) :
 TAB Tabfloat[j] déjà calculé au quad 78 dans T45
 

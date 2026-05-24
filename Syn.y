@@ -28,21 +28,7 @@ static int while_start_stack[MAX_WHILE_NEST];
 static int while_bz_stack[MAX_WHILE_NEST];
 static int while_top = -1;
 
-/*
- * Contexte des boucles for imbriquees.
- *
- * BUG 3 CORRIGE : l'ancienne implementation cherchait le BZ non patche
- * en remontant le tableau a reculons, ce qui est fragile (un BZ non
- * patche issu d'un if imbrique pouvait etre intercepte).  On utilise
- * maintenant un vrai empilement comme pour while, avec deux informations
- * par niveau :
- *   for_cond_stack[top] = indice du quad DEBUT DE CONDITION (quad <=)
- *                         -> cible du BR de rebouclage
- *   for_bz_stack[top]   = indice du quad BZ (a patcher a la fin)
- *
- * Cela garantit que chaque endfor patche exactement son propre BZ,
- * independamment des structures de controle imbriquees.
- */
+
 #define MAX_FOR_NEST 100
 static int for_cond_stack[MAX_FOR_NEST]; /* indice du quad condition */
 static int for_bz_stack[MAX_FOR_NEST];   /* indice du quad BZ        */
@@ -128,7 +114,7 @@ programme
             printf("\n=== Code intermediaire APRES optimisation ===\n");
             afficher_qdr();
             if (semantic_errors == 0) {
-                generer_asm("sortie.asm");
+                generer_asm(NULL);
             } else {
                 printf("Generation assembleur ignoree (erreurs semantiques).\n");
             }
@@ -152,9 +138,7 @@ declaration
     | decl_constante
     | error SEP_SEMICOLON
         {
-            /* BUG 6 CORRIGE : liberer et reinitialiser la liste pending
-               pour eviter que des noms fantomes contaminent la prochaine
-               declaration valide. */
+            
             int _i;
             for (_i = 0; _i < pending_count; _i++) free(pending_idfs[_i]);
             pending_count = 0;
@@ -433,21 +417,7 @@ instruction_loop_while
         }
     ;
 
-/*
- * BUG 3 CORRIGE : generation de code pour la boucle for.
- *
- * Ancienne approche : recherche arriere de "le premier BZ non patche"
- *   -> fragile si un if non ferme existe dans le corps.
- *   -> BR de rebouclage pointe vers bz_idx-1, faux si la condition a
- *      genere plusieurs quadruplets (expression complexe).
- *
- * Nouvelle approche :
- *   1. On enregistre for_cond_stack[top] = qc juste AVANT d'emettre
- *      les quads de la condition (debut reel de la condition).
- *   2. On enregistre for_bz_stack[top] = indice du BZ emis apres.
- *   3. A endfor : BR pointe vers for_cond_stack[top] (debut condition).
- *      BZ est patche vers qc (apres le BR = sortie de boucle).
- */
+
 instruction_for
     : FOR_MC IDF IN_MC expression TO_MC expression
         {
@@ -615,8 +585,7 @@ expression
                        $1, nb_ligne, nb_col);
                 semantic_errors++;
             } else if (!ts_est_initialise($1)) {
-                /* BUG 5 CORRIGE : verifier l'initialisation aussi dans les expressions
-                   arithmetiques, pas uniquement dans out(). */
+               
                 printf(RED "ERREUR semantique: variable '%s' utilisee sans initialisation, ligne %d, col %d" RESET "\n",
                        $1, nb_ligne, nb_col);
                 semantic_errors++;
